@@ -10,10 +10,11 @@ async function bodyOf(request) {
 
 function send(response, status, payload, cookie) {
   if (response?.status) {
+    response.setHeader('Cache-Control', 'no-store, private');
     if (cookie) response.setHeader('Set-Cookie', cookie);
     return response.status(status).json(payload);
   }
-  const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+  const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, private' };
   if (cookie) headers['Set-Cookie'] = cookie;
   return new Response(JSON.stringify(payload), { status, headers });
 }
