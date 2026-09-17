@@ -1,21 +1,28 @@
-import { db, json, methodNotAllowed, serverError, workspaceIdFrom } from './_lib/db.js';
+import { db, json, methodNotAllowed, serverError } from './_lib/db.js';
+import { requireAuth } from './_lib/auth.js';
+
+async function bodyOf(request) {
+  if (request.body && typeof request.body === 'object') return request.body;
+  return request.json();
+}
 
 export default async function handler(request, response) {
   try {
+    const auth = await requireAuth(request);
+    const workspaceId = auth.workspace.id;
     const sql = db();
+
     if (request.method === 'GET') {
-      const workspaceId = workspaceIdFrom(request);
       const rows = await sql`select player_id from watchlists where workspace_id = ${workspaceId} order by created_at desc`;
-      const data = rows.map(row => row.player_id);
-      return response?.status ? response.status(200).json(data) : json(data);
+      return response?.status ? response.status(200).json(rows.map(row => row.player_id)) : json(rows.map(row => row.player_id));
     }
 
-    const body = request.body || await request.json();
-    const workspaceId = workspaceIdFrom(request, body);
-    if (!body.playerId && !body.player_id) {
-      return response?.status ? response.status(400).json({ error: 'playerId is required.' }) : json({ error: 'playerId is required.' }, 400);
-    }
+    const body = await bodyOf(request);
     const playerId = body.playerId || body.player_id;
+    if (!playerId) return json({ error: 'playerId is required.' }, 400);
+
+    const [ownedPlayer] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${workspaceId} limit 1`;
+    if (!ownedPlayer) return json({ error: 'Player is not in your workspace.' }, 404);
 
     if (request.method === 'POST') {
       const [row] = await sql`
@@ -35,7 +42,8 @@ export default async function handler(request, response) {
     return methodNotAllowed('GET, POST or DELETE');
   } catch (error) {
     const result = serverError(error);
-    if (response?.status) return response.status(500).json(await result.json());
+    const status = error?.status || 500;
+    if (response?.status) return response.status(status).json(await result.json());
     return result;
   }
 }
