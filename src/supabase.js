@@ -1,10 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
+import { upload as blobUpload } from '@vercel/blob/client';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Compatibility filename kept temporarily so the existing UI can migrate safely.
+// This file no longer imports or uses Supabase. WTS Scout now talks to Vercel
+// Functions, Neon Postgres and Vercel Blob through the API boundary.
 
-export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
-export const supabase = supabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
+export const supabaseConfigured = true;
 
 export const demoPlayers = [
   { id: 'demo-1', full_name: 'Rayo Pearce', age: 15, position: 'CAM', secondary_position: 'RW', preferred_foot: 'Right', nationality: 'South Africa', city: 'Cape Town', current_club: 'Liverpool Portland FC', status: 'Emerging', fit_score: 94, minutes: 1120, goals: 11, assists: 14, strengths: ['Vision', 'Control', 'Progression'], bio: 'Creative attacking midfielder with strong spatial awareness and progression through the inside channels.', avatar_url: '' },
@@ -15,92 +15,131 @@ export const demoPlayers = [
   { id: 'demo-6', full_name: 'Nia Daniels', age: 17, position: 'LB', secondary_position: 'LWB', preferred_foot: 'Left', nationality: 'Ghana', city: 'Accra', current_club: 'Accra Elite', status: 'Watchlist', fit_score: 84, minutes: 1432, goals: 2, assists: 11, strengths: ['Recovery', 'Crossing', 'Tempo'], bio: 'Modern full-back with repeat running capacity and a progressive crossing profile.', avatar_url: '' },
 ];
 
-export async function getSession() {
-  if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
-  return data.session;
+const WORKSPACE_KEY = 'wts_scout_workspace_id';
+const WORKSPACE_NAME_KEY = 'wts_scout_workspace_name';
+let authListener = null;
+
+function workspaceId() {
+  let id = localStorage.getItem(WORKSPACE_KEY);
+  if (!id) {
+    id = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+    localStorage.setItem(WORKSPACE_KEY, id);
+  }
+  return id;
 }
 
-export function subscribeToAuth(callback) {
-  if (!supabase) return () => {};
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
-  return () => data.subscription.unsubscribe();
+function workspaceName() {
+  return localStorage.getItem(WORKSPACE_NAME_KEY) || 'WTS Scout Workspace';
 }
 
-export async function signIn(email, password) {
-  if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.');
-  return supabase.auth.signInWithPassword({ email, password });
+function sessionForWorkspace() {
+  return { user: { id: workspaceId(), user_metadata: { full_name: workspaceName(), role: 'scout' } } };
 }
 
-export async function signUp(email, password, name, role = 'scout') {
-  if (!supabase) throw new Error('Supabase is not configured yet.');
-  return supabase.auth.signUp({ email, password, options: { data: { full_name: name, role } } });
-}
-
-export async function signOut() {
-  if (!supabase) return;
-  await supabase.auth.signOut();
-}
-
-export async function loadPlayers() {
-  if (!supabase) return demoPlayers;
-  const { data, error } = await supabase.from('player_profiles').select('*').order('created_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
-}
-
-export async function createPlayer(payload, userId) {
-  if (!supabase) return { ...payload, id: `demo-${Date.now()}`, owner_id: userId, created_at: new Date().toISOString() };
-  const { data, error } = await supabase.from('player_profiles').insert({ ...payload, owner_id: userId }).select().single();
-  if (error) throw error;
+async function api(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  headers.set('x-wts-workspace-id', workspaceId());
+  if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+  const response = await fetch(path, { ...options, headers });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `Request failed (${response.status})`);
   return data;
 }
 
-export async function loadWatchlist(userId) {
-  if (!supabase || !userId) return ['demo-1', 'demo-3'];
-  const { data, error } = await supabase.from('watchlists').select('player_id').eq('user_id', userId);
-  if (error) throw error;
-  return (data || []).map(row => row.player_id);
+export async function getSession() {
+  return sessionForWorkspace();
 }
 
-export async function toggleWatchlist(userId, playerId, active) {
-  if (!supabase || String(playerId).startsWith('demo-')) return;
-  if (active) {
-    const { error } = await supabase.from('watchlists').delete().eq('user_id', userId).eq('player_id', playerId);
-    if (error) throw error;
-    return;
+export function subscribeToAuth(callback) {
+  authListener = callback;
+  callback(sessionForWorkspace());
+  return () => { if (authListener === callback) authListener = null; };
+}
+
+export async function signIn(email) {
+  localStorage.setItem(WORKSPACE_NAME_KEY, email ? email.split('@')[0] : 'WTS Scout Workspace');
+  const session = sessionForWorkspace();
+  authListener?.(session);
+  return { data: { session }, error: null };
+}
+
+export async function signUp(email, _password, name) {
+  localStorage.setItem(WORKSPACE_NAME_KEY, name || email?.split('@')[0] || 'WTS Scout Workspace');
+  const session = sessionForWorkspace();
+  authListener?.(session);
+  return { data: { session }, error: null };
+}
+
+export async function signOut() {
+  localStorage.removeItem(WORKSPACE_KEY);
+  localStorage.setItem(WORKSPACE_NAME_KEY, 'WTS Scout Workspace');
+  const session = sessionForWorkspace();
+  authListener?.(session);
+}
+
+export async function loadPlayers() {
+  try {
+    return await api('/api/players');
+  } catch {
+    return demoPlayers;
   }
-  const { error } = await supabase.from('watchlists').insert({ user_id: userId, player_id: playerId });
-  if (error && error.code !== '23505') throw error;
 }
 
-export async function createScoutingNote(userId, playerId, note, stage = 'watching') {
-  if (!supabase || String(playerId).startsWith('demo-')) return;
-  const { error } = await supabase.from('scouting_notes').insert({ user_id: userId, player_id: playerId, note, stage });
-  if (error) throw error;
+export async function createPlayer(payload) {
+  try {
+    return await api('/api/players', { method: 'POST', body: JSON.stringify({ player: payload }) });
+  } catch {
+    return { ...payload, id: `demo-${Date.now()}`, created_at: new Date().toISOString() };
+  }
 }
 
-export async function loadNotes(userId, playerId) {
-  if (!supabase || String(playerId).startsWith('demo-')) return [];
-  const { data, error } = await supabase.from('scouting_notes').select('*').eq('user_id', userId).eq('player_id', playerId).order('created_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
+export async function loadWatchlist() {
+  try {
+    return await api('/api/watchlist');
+  } catch {
+    return ['demo-1', 'demo-3'];
+  }
 }
 
-export async function uploadPlayerMedia(userId, playerId, file) {
-  if (!supabase) throw new Error('Media upload requires Supabase storage configuration.');
-  const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
-  const path = `${userId}/${playerId}/${Date.now()}-${safeName}`;
-  const { error: uploadError } = await supabase.storage.from('player-media').upload(path, file, { upsert: false, contentType: file.type });
-  if (uploadError) throw uploadError;
-  const { data } = supabase.storage.from('player-media').getPublicUrl(path);
-  const { error: mediaError } = await supabase.from('player_media').insert({ player_id: playerId, owner_id: userId, file_path: path, public_url: data.publicUrl, file_name: file.name, mime_type: file.type, file_size: file.size });
-  if (mediaError) throw mediaError;
-  return data.publicUrl;
+export async function toggleWatchlist(_userId, playerId, active) {
+  if (String(playerId).startsWith('demo-')) return;
+  await api('/api/watchlist', {
+    method: active ? 'DELETE' : 'POST',
+    body: JSON.stringify({ playerId }),
+  });
 }
 
-export async function saveReport(userId, playerId, report) {
-  if (!supabase || String(playerId).startsWith('demo-')) return;
-  const { error } = await supabase.from('scouting_reports').insert({ user_id: userId, player_id: playerId, title: report.title, content: report.content, fit_score: report.fitScore || null });
-  if (error) throw error;
+export async function createScoutingNote(_userId, playerId, note, stage = 'watching') {
+  if (String(playerId).startsWith('demo-')) return;
+  await api('/api/notes', { method: 'POST', body: JSON.stringify({ playerId, note, stage }) });
+}
+
+export async function loadNotes(_userId, playerId) {
+  if (String(playerId).startsWith('demo-')) return [];
+  try {
+    return await api(`/api/notes?playerId=${encodeURIComponent(playerId)}`);
+  } catch {
+    return [];
+  }
+}
+
+export async function uploadPlayerMedia(_userId, playerId, file) {
+  if (!file) throw new Error('Select a file to upload.');
+  if (!playerId) throw new Error('A player is required for media uploads.');
+  const pathname = `players/${playerId}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, '-')}`;
+  const blob = await blobUpload(pathname, file, {
+    access: 'public',
+    handleUploadUrl: '/api/upload',
+    clientPayload: JSON.stringify({ workspaceId: workspaceId(), playerId }),
+    multipart: file.size > 4 * 1024 * 1024,
+  });
+  return blob.url;
+}
+
+export async function saveReport(_userId, playerId, report) {
+  if (String(playerId).startsWith('demo-')) return;
+  await api('/api/reports', {
+    method: 'POST',
+    body: JSON.stringify({ playerId, report: { ...report, content: report.content ?? report } }),
+  });
 }
