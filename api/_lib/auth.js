@@ -10,7 +10,7 @@ const PASSWORD_MAX = 128;
 function normalizeEmail(email) {
   if (typeof email !== 'string') throw new Error('A valid email address is required.');
   const normalized = email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) || normalized.length > 254) {
+  if (!/^\S+@\S+\.\S+$/.test(normalized) || normalized.length > 254) {
     throw new Error('A valid email address is required.');
   }
   return normalized;
@@ -33,7 +33,7 @@ export async function verifyPassword(password, encoded) {
   try {
     assertPassword(password);
     const [algorithm, n, r, p, salt, expected] = String(encoded || '').split('$');
-    if (algorithm !== 'scrypt' || !n || !r || !p || !salt || !expected) return false;
+    if (algorithm !== 'scrypt' || !/^\d+$/.test(n) || !/^\d+$/.test(r) || !/^\d+$/.test(p) || !salt || !expected) return false;
     const key = await scrypt(password, salt, 64, { N: Number(n), r: Number(r), p: Number(p) });
     const actual = Buffer.from(key);
     const wanted = Buffer.from(expected, 'base64url');
@@ -56,17 +56,17 @@ function parseCookies(request) {
   }).filter(([key]) => key));
 }
 
-function cookieOptions(maxAge) {
-  const secure = process.env.VERCEL_ENV === 'production' ? '; Secure' : '';
-  return `${SESSION_COOKIE}=${maxAge > 0 ? encodeURIComponent(maxAge.token) : ''}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, maxAge.maxAge)}${secure}`;
+function cookieString(token, maxAge) {
+  const secure = process.env.VERCEL_ENV ? '; Secure' : '';
+  return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ''}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, maxAge)}${secure}`;
 }
 
 export function clearSessionCookie() {
-  return cookieOptions({ token: '', maxAge: 0 });
+  return cookieString('', 0);
 }
 
 export function sessionCookie(token) {
-  return cookieOptions({ token, maxAge: SESSION_DAYS * 24 * 60 * 60 });
+  return cookieString(token, SESSION_DAYS * 24 * 60 * 60);
 }
 
 export async function createSession(userId) {
@@ -82,7 +82,8 @@ export async function destroySession(request) {
   const cookies = parseCookies(request);
   const token = cookies[SESSION_COOKIE];
   if (!token) return;
-  await db()`delete from app_sessions where token_hash = ${hashToken(token)}`;
+  const sql = db();
+  await sql`delete from app_sessions where token_hash = ${hashToken(token)}`;
 }
 
 export async function requireAuth(request, { roles = [] } = {}) {
