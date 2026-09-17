@@ -89,7 +89,7 @@ export async function destroySession(request) {
   await sql`delete from app_sessions where token_hash = ${hashToken(token)}`;
 }
 
-export async function requireAuth(request, { roles = [] } = {}) {
+export async function requireAuth(request, { roles = [], workspaceRoles = [] } = {}) {
   const cookies = parseCookies(request);
   const token = cookies[SESSION_COOKIE];
   if (!token) throw Object.assign(new Error('Authentication required.'), { status: 401 });
@@ -117,7 +117,11 @@ export async function requireAuth(request, { roles = [] } = {}) {
   `;
 
   if (!row) throw Object.assign(new Error('Your session has expired. Please sign in again.'), { status: 401 });
-  if (roles.length && !roles.includes(row.account_role) && !roles.includes(row.workspace_role)) {
+
+  const accountAllowed = !roles.length || roles.includes(row.account_role);
+  const workspaceAllowed = !workspaceRoles.length || workspaceRoles.includes(row.workspace_role);
+  const accessRestricted = roles.length || workspaceRoles.length;
+  if (accessRestricted && !(accountAllowed && workspaceAllowed)) {
     throw Object.assign(new Error('You do not have permission to perform this action.'), { status: 403 });
   }
 
