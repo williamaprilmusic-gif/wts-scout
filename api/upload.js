@@ -11,36 +11,37 @@ function validUuid(value) {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-async function bodyOf(request) {
-  if (request.body && typeof request.body === 'object') return request.body;
-  return request.json();
-}
-
 export default async function handler(request, response) {
   try {
     if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed.' });
     if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
 
     const auth = await requireAuth(request);
-    const body = await bodyOf(request);
-    const clientPayload = body?.payload || body?.clientPayload;
-    let supplied = {};
-    try { supplied = clientPayload ? JSON.parse(clientPayload) : {}; } catch { return response.status(400).json({ error: 'Invalid upload payload.' }); }
-    if (!validUuid(supplied.playerId)) return response.status(400).json({ error: 'A valid playerId is required.' });
-
+    const body = request.body && typeof request.body === 'object' ? request.body : await request.json();
     const sql = db();
-    const [player] = await sql`select id from player_profiles where id = ${supplied.playerId}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
-    if (!player) return response.status(404).json({ error: 'Player is not in your workspace.' });
 
     const result = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes,
-        maximumSizeInBytes: 5 * 1024 * 1024 * 1024,
-        addRandomSuffix: true,
-        tokenPayload: JSON.stringify({ workspaceId: auth.workspace.id, playerId: supplied.playerId }),
-      }),
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        let payload;
+        try { payload = JSON.parse(clientPayload || '{}'); } catch { throw new Error('Invalid upload payload.'); }
+        const playerId = payload.playerId;
+        if (!validUuid(playerId)) throw new Error('A valid playerId is required.');
+
+        const [player] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
+        if (!player) throw new Error('Player is not in your workspace.');
+
+        const expectedPrefix = `players/${auth.workspace.id}/${playerId}/`;
+        if (!String(pathname || '').startsWith(expectedPrefix)) throw new Error('Invalid player media path.');
+
+        return {
+          allowedContentTypes,
+          maximumSizeInBytes: 5 * 1024 * 1024 * 1024,
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({ workspaceId: auth.workspace.id, playerId }),
+        };
+      },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         try {
           const payload = JSON.parse(tokenPayload || '{}');
