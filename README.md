@@ -17,7 +17,7 @@ Vercel
         └── Vercel AI Gateway + AI SDK → scouting intelligence
 ```
 
-Vercel Functions are the server boundary. Browser code never talks directly to Neon, Blob credentials or an AI provider. Neon is the relational source of truth; Blob is the object store; AI SDK routes scouting generation through Vercel AI Gateway. Vercel's current Marketplace supports Neon as a Vercel-native serverless Postgres integration, while Vercel Blob provides object storage and client uploads; the AI SDK supports the Vercel AI Gateway with model strings such as `openai/gpt-5.4`. 
+Vercel Functions are the server boundary. Browser code never talks directly to Neon, Blob credentials or an AI provider. Neon is the relational source of truth; Blob is the object store; AI SDK routes scouting generation through Vercel AI Gateway. Vercel's current Marketplace supports Neon as a Vercel-native serverless Postgres integration, while Vercel Blob provides object storage and client uploads; the AI SDK supports the Vercel AI Gateway with model strings such as `openai/gpt-5.4`.
 
 ## What changed
 
@@ -26,13 +26,14 @@ Vercel Functions are the server boundary. Browser code never talks directly to N
 - Added Vercel Functions for players, shortlists, scouting notes and reports.
 - Added Vercel Blob client-upload boundary at `api/upload.js` for large media.
 - Replaced the old direct OpenAI HTTP call with Vercel AI SDK + AI Gateway in `api/scout.js`.
-- Added `/api/health` to show which backend services are configured.
+- Added `/api/health` to validate the Neon connection and report Blob/AI configuration state.
 - Kept a demo fallback so the dashboard can still be reviewed before services are provisioned.
+- Added GitHub Actions CI for Node 22 production builds.
 
 ## Provision the services
 
 1. In the Vercel project, create/install the **Neon** database integration and make the resulting `DATABASE_URL` available to the project.
-2. In Vercel Storage, create a **Blob** store connected to this project. The current upload boundary uses public media URLs for the existing player-media UI; switch to a private Blob store plus authenticated signed URLs before handling sensitive player footage.
+2. In Vercel Storage, create a **private Blob** store connected to this project. Upload tokens are scoped through the server callback and completed media metadata is stored in Neon.
 3. Run `db/schema.sql` against the Neon database.
 4. Enable Vercel AI Gateway for the project and provide `AI_GATEWAY_API_KEY` when API-key authentication is used. Vercel-hosted deployments can also use the platform's OIDC-based authentication flow where supported.
 5. Redeploy from `main`.
@@ -51,3 +52,5 @@ Without backend variables, the UI falls back to demo player data. Once Neon is c
 ## Important production hardening
 
 The current 0.3 workspace identity is a browser-generated workspace ID so the Vercel-first architecture can operate without adding another authentication vendor. It is **not a secure multi-user authentication system**. Before opening WTS Scout to multiple real scouts/clubs/academies, add real authentication and enforce authorization in every API route and Blob token callback. This is intentionally separated from the GitHub → Vercel → Database → Blob → AI architecture so an auth provider can be introduced without rewriting the data and AI layers.
+
+See `SETUP.md` for the infrastructure setup checklist and exact Vercel CLI examples.
