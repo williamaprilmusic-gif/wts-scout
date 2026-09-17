@@ -17,6 +17,8 @@ export default async function handler(request, response) {
       return response?.status ? response.status(200).json(rows.map(row => row.player_id)) : json(rows.map(row => row.player_id));
     }
 
+    if (!['POST', 'DELETE'].includes(request.method)) return methodNotAllowed('GET, POST or DELETE');
+    await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     const body = await bodyOf(request);
     const playerId = body.playerId || body.player_id;
     if (!playerId) return json({ error: 'playerId is required.' }, 400);
@@ -34,12 +36,8 @@ export default async function handler(request, response) {
       return response?.status ? response.status(201).json(row) : json(row, 201);
     }
 
-    if (request.method === 'DELETE') {
-      await sql`delete from watchlists where workspace_id = ${workspaceId} and player_id = ${playerId}::uuid`;
-      return response?.status ? response.status(200).json({ ok: true }) : json({ ok: true });
-    }
-
-    return methodNotAllowed('GET, POST or DELETE');
+    await sql`delete from watchlists where workspace_id = ${workspaceId} and player_id = ${playerId}::uuid`;
+    return response?.status ? response.status(200).json({ ok: true }) : json({ ok: true });
   } catch (error) {
     const result = serverError(error);
     const status = error?.status || 500;
