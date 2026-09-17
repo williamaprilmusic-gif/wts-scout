@@ -17,7 +17,7 @@ export default async function handler(request, response) {
   if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed.' });
 
   try {
-    const auth = await requireAuth(request);
+    const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     const body = request.body || await request.json();
     if (!body?.player?.id) return response.status(400).json({ error: 'A saved player profile is required.' });
     const [player] = await db()`select * from player_profiles where id = ${body.player.id}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
