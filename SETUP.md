@@ -1,4 +1,4 @@
-# WTS Scout — Infrastructure Setup
+# WTS Scout — Production Setup
 
 WTS Scout uses this production architecture:
 
@@ -16,7 +16,13 @@ Vercel CLI example:
 vercel install neon --name wts-scout-db --plan free -e production -e preview
 ```
 
-Then run `db/schema.sql` against the provisioned database.
+Then run the unified schema:
+
+```text
+db/schema.sql
+```
+
+That schema includes authentication users, workspaces, memberships, sessions and the scouting data tables.
 
 Required variable:
 
@@ -24,9 +30,32 @@ Required variable:
 DATABASE_URL
 ```
 
-## 2. Media — Vercel Blob
+The Neon database is server-side only. The browser never receives `DATABASE_URL`.
 
-Create a Vercel Blob store and connect it to the `wts-scout` project. The upload endpoint uses the Vercel Blob client upload flow and records completed media metadata in Neon.
+## 2. Authentication — WTS Scout application identity
+
+WTS Scout now uses database-backed application authentication rather than a browser-generated workspace ID.
+
+The current system provides:
+
+- Email/password signup and sign-in
+- Salted `scrypt` password hashing
+- Cryptographically random opaque session tokens
+- SHA-256 token hashes stored in Neon
+- `HttpOnly`, `SameSite=Lax` session cookies with `Secure` on Vercel
+- Automatic workspace creation at signup
+- Workspace membership records for authorization
+- Server-derived workspace context for player, shortlist, notes, reports, AI and media APIs
+
+No Supabase project is required.
+
+Before a large public launch, add email verification, password reset/recovery, login abuse/rate limiting, audit logs and a workspace invitation flow.
+
+## 3. Media — Vercel Blob
+
+Create a **private** Vercel Blob store and connect it to the `wts-scout` project.
+
+The upload endpoint validates the authenticated user, workspace membership and player ownership before it issues a Blob upload token. Completed media metadata is stored in Neon.
 
 Required variable for token-based Blob stores:
 
@@ -36,11 +65,11 @@ BLOB_READ_WRITE_TOKEN
 
 Newer Blob setups may use Vercel OIDC instead of a static token.
 
-## 3. AI — Vercel AI Gateway
+## 4. AI — Vercel AI Gateway
 
-Create/configure an AI Gateway API key for the project.
+Configure Vercel AI Gateway for the project.
 
-Required variable:
+Required variable when API-key authentication is used:
 
 ```text
 AI_GATEWAY_API_KEY
@@ -52,26 +81,33 @@ Optional model override:
 WTS_SCOUT_MODEL=openai/gpt-5.4
 ```
 
-The model receives supplied player data and a recruitment brief. The server prompt explicitly prevents invented statistics and treats fit scoring as internal screening aid rather than a career prediction.
+The AI route requires an authenticated workspace and verifies that the player belongs to that workspace before generating a report. The server prompt is evidence-led and explicitly prohibits inventing player statistics or history.
 
-## 4. Authentication
+## 5. Environment variables
 
-The current UI uses a local workspace identity so the app can operate before an identity provider is provisioned. It is not secure multi-user authentication.
+Keep these values server-side in Vercel Project Settings:
 
-Before opening WTS Scout to external scouts, clubs or academies, replace the workspace header trust with a real server-verifiable identity system (for example Sign in with Vercel, Clerk or another OIDC provider). The API should derive `workspaceId` from the authenticated session rather than from a client-supplied header.
+```text
+DATABASE_URL
+BLOB_READ_WRITE_TOKEN
+AI_GATEWAY_API_KEY
+WTS_SCOUT_MODEL
+```
 
-## 5. Deploy
+Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
 
-GitHub `main` is connected to Vercel. A push to `main` creates a production deployment automatically.
+## 6. Deploy
 
-Manual CLI equivalents:
+The Git repository is connected to Vercel and `main` is configured to allow Git deployments.
+
+Manual CLI equivalents documented by Vercel are:
 
 ```bash
 vercel deploy
 vercel deploy --prod
 ```
 
-## 6. Health check
+## 7. Health check
 
 Use:
 
@@ -79,15 +115,18 @@ Use:
 /api/health
 ```
 
-The endpoint verifies the Neon database with `select 1` and reports Blob and AI configuration state. It returns HTTP 503 when the database is not configured or unhealthy.
+The endpoint checks database connectivity and reports whether Blob and AI configuration is present. It does not expose secret values.
 
-## 7. Production checklist
+## 8. Production checklist
 
-- Neon database provisioned and schema applied
+- Neon database provisioned
+- `db/schema.sql` applied successfully
 - `DATABASE_URL` configured in Production and Preview
-- Vercel Blob store connected
-- `BLOB_READ_WRITE_TOKEN` configured when required
-- AI Gateway key configured
-- Real authentication installed before multi-user launch
-- API routes tested in Preview before Production promotion
-- GitHub CI build passing
+- Private Vercel Blob store connected
+- Blob token/OIDC configured
+- AI Gateway configured
+- Real authentication enabled
+- Workspace authorization enabled on all protected APIs
+- GitHub CI production build passing
+- Current `main` commit deployed to Vercel Production
+- Preview auth, player creation, shortlist, notes, reports and media uploads tested before public launch
