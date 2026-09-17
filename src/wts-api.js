@@ -111,10 +111,11 @@ export async function loadNotes(_userId, playerId) {
   }
 }
 
-export async function uploadPlayerMedia(_userId, playerId, file) {
+export async function uploadPlayerMedia(userId, playerId, file) {
   if (String(playerId).startsWith('demo-')) throw new Error('Media uploads require a saved database player profile.');
+  if (!userId) throw new Error('Authentication is required for media uploads.');
   const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
-  return blobUpload(`players/current/${playerId}/${Date.now()}-${safeName}`, file, {
+  return blobUpload(`players/${userId}/${playerId}/${Date.now()}-${safeName}`, file, {
     access: 'private',
     handleUploadUrl: '/api/upload',
     clientPayload: JSON.stringify({ playerId }),
