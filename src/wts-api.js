@@ -18,10 +18,7 @@ function normalizeSession(raw) {
     ...raw,
     user: {
       ...raw.user,
-      user_metadata: {
-        full_name: raw.user.full_name,
-        role: raw.user.role,
-      },
+      user_metadata: { full_name: raw.user.full_name, role: raw.user.role },
     },
   };
 }
@@ -97,7 +94,8 @@ export async function loadPlayers() {
   try {
     const result = await api('/api/players');
     return Array.isArray(result) ? result : result.players || [];
-  } catch {
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) throw error;
     return demoPlayers;
   }
 }
@@ -111,7 +109,8 @@ export async function loadWatchlist(_userId) {
   try {
     const result = await api('/api/watchlist');
     return Array.isArray(result) ? result : result.playerIds || [];
-  } catch {
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) throw error;
     return ['demo-1', 'demo-3'];
   }
 }
