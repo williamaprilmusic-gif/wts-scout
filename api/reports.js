@@ -22,6 +22,7 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'POST') {
+      await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
       const body = await bodyOf(request);
       const playerId = body.playerId || body.player_id;
       const report = body.report || body;
