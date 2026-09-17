@@ -6,6 +6,9 @@ const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = 'wts_session';
 const SESSION_DAYS = 30;
 const PASSWORD_MAX = 128;
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
 
 function normalizeEmail(email) {
   if (typeof email !== 'string') throw new Error('A valid email address is required.');
@@ -25,16 +28,16 @@ function assertPassword(password) {
 export async function hashPassword(password) {
   assertPassword(password);
   const salt = randomBytes(16).toString('base64url');
-  const key = await scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 });
-  return `scrypt$16384$8$1$${salt}$${Buffer.from(key).toString('base64url')}`;
+  const key = await scrypt(password, salt, 64, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${Buffer.from(key).toString('base64url')}`;
 }
 
 export async function verifyPassword(password, encoded) {
   try {
     assertPassword(password);
     const [algorithm, n, r, p, salt, expected] = String(encoded || '').split('$');
-    if (algorithm !== 'scrypt' || !/^\d+$/.test(n) || !/^\d+$/.test(r) || !/^\d+$/.test(p) || !salt || !expected) return false;
-    const key = await scrypt(password, salt, 64, { N: Number(n), r: Number(r), p: Number(p) });
+    if (algorithm !== 'scrypt' || n !== String(SCRYPT_N) || r !== String(SCRYPT_R) || p !== String(SCRYPT_P) || !salt || !expected) return false;
+    const key = await scrypt(password, salt, 64, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
     const actual = Buffer.from(key);
     const wanted = Buffer.from(expected, 'base64url');
     return actual.length === wanted.length && timingSafeEqual(actual, wanted);
@@ -105,7 +108,7 @@ export async function requireAuth(request, { roles = [] } = {}) {
       s.expires_at
     from app_sessions s
     join app_users u on u.id = s.user_id
-    join workspace_members wm on wm.user_id = u.id
+    join workspace_members wm on wm.user_id = s.user_id
     join workspaces w on w.id = wm.workspace_id
     where s.token_hash = ${tokenHash}
       and s.expires_at > now()
