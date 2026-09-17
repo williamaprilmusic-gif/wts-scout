@@ -8,16 +8,25 @@ async function bodyOf(request) {
   return request.json();
 }
 
+function send(response, status, payload, cookie) {
+  if (response?.status) {
+    if (cookie) response.setHeader('Set-Cookie', cookie);
+    return response.status(status).json(payload);
+  }
+  const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+  if (cookie) headers['Set-Cookie'] = cookie;
+  return new Response(JSON.stringify(payload), { status, headers });
+}
+
 export default async function handler(request, response) {
   try {
     if (request.method === 'GET') {
       try {
         const session = await requireAuth(request);
-        const payload = { session: { user: session.user, workspace: session.workspace } };
-        return response?.status ? response.status(200).json(payload) : json(payload);
+        return send(response, 200, { session: { user: session.user, workspace: session.workspace } });
       } catch (error) {
         const status = authErrorStatus(error);
-        if (status === 401) return response?.status ? response.status(200).json({ session: null }) : json({ session: null });
+        if (status === 401) return send(response, 200, { session: null });
         throw error;
       }
     }
@@ -29,15 +38,14 @@ export default async function handler(request, response) {
 
     if (action === 'signup') {
       const email = normalizeEmail(body.email);
-      const password = body.password;
       if (typeof body.name !== 'string' || body.name.trim().length < 2 || body.name.trim().length > 120) {
-        return json({ error: 'Full name must be between 2 and 120 characters.' }, 400);
+        return send(response, 400, { error: 'Full name must be between 2 and 120 characters.' });
       }
-      if (!publicRoles.has(body.role)) return json({ error: 'Select a valid account type.' }, 400);
+      if (!publicRoles.has(body.role)) return send(response, 400, { error: 'Select a valid account type.' });
 
-      const passwordHash = await hashPassword(password);
+      const passwordHash = await hashPassword(body.password);
       const existing = await sql`select id from app_users where lower(email) = ${email} limit 1`;
-      if (existing.length) return json({ error: 'An account with that email already exists.' }, 409);
+      if (existing.length) return send(response, 409, { error: 'An account with that email already exists.' });
 
       const [user] = await sql`
         insert into app_users (email, full_name, role, password_hash)
@@ -55,20 +63,17 @@ export default async function handler(request, response) {
         values (${workspace.id}, ${user.id}::uuid, 'owner')
       `;
       const token = await createSession(user.id);
-      const payload = {
+      return send(response, 201, {
         session: {
           user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role },
           workspace: { id: workspace.id, name: workspace.name, role: 'owner' },
         },
-      };
-      const result = response?.status ? response.status(201).json(payload) : json(payload, 201);
-      result.headers.set('Set-Cookie', sessionCookie(token));
-      return result;
+      }, sessionCookie(token));
     }
 
     if (action === 'signin') {
       const email = normalizeEmail(body.email);
-      if (typeof body.password !== 'string') return json({ error: 'Password is required.' }, 400);
+      if (typeof body.password !== 'string') return send(response, 400, { error: 'Password is required.' });
       const [user] = await sql`
         select id, email, full_name, role, password_hash
         from app_users
@@ -76,7 +81,7 @@ export default async function handler(request, response) {
         limit 1
       `;
       if (!user || !(await verifyPassword(body.password, user.password_hash))) {
-        return json({ error: 'Invalid email or password.' }, 401);
+        return send(response, 401, { error: 'Invalid email or password.' });
       }
       const [workspace] = await sql`
         select w.id, w.name, wm.role
@@ -86,31 +91,26 @@ export default async function handler(request, response) {
         order by wm.created_at asc
         limit 1
       `;
-      if (!workspace) return json({ error: 'Your account has no active workspace.' }, 403);
+      if (!workspace) return send(response, 403, { error: 'Your account has no active workspace.' });
       const token = await createSession(user.id);
-      const payload = {
+      return send(response, 200, {
         session: {
           user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role },
           workspace: { id: workspace.id, name: workspace.name, role: workspace.role },
         },
-      };
-      const result = response?.status ? response.status(200).json(payload) : json(payload);
-      result.headers.set('Set-Cookie', sessionCookie(token));
-      return result;
+      }, sessionCookie(token));
     }
 
     if (action === 'signout') {
       await destroySession(request);
-      const result = response?.status ? response.status(200).json({ ok: true }) : json({ ok: true });
-      result.headers.set('Set-Cookie', clearSessionCookie());
-      return result;
+      return send(response, 200, { ok: true }, clearSessionCookie());
     }
 
-    return json({ error: 'Supported actions are signup, signin and signout.' }, 400);
+    return send(response, 400, { error: 'Supported actions are signup, signin and signout.' });
   } catch (error) {
     const status = authErrorStatus(error);
-    const result = status >= 400 && status < 600 ? json({ error: error instanceof Error ? error.message : 'Authentication failed.' }, status) : serverError(error);
-    if (response?.status) return response.status(status >= 400 && status < 600 ? status : 500).json(await result.json());
-    return result;
+    if (status >= 400 && status < 600 && status !== 500) return send(response, status, { error: error instanceof Error ? error.message : 'Authentication failed.' });
+    if (response?.status) return response.status(500).json({ error: 'Authentication service error.' });
+    return serverError(error);
   }
 }
