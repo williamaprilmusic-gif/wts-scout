@@ -32,20 +32,20 @@ export default async function handler(request, response) {
         const [player] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
         if (!player) throw new Error('Player is not in your workspace.');
 
-        const expectedPrefix = `players/${auth.workspace.id}/${playerId}/`;
+        const expectedPrefix = `players/${auth.user.id}/${playerId}/`;
         if (!String(pathname || '').startsWith(expectedPrefix)) throw new Error('Invalid player media path.');
 
         return {
           allowedContentTypes,
           maximumSizeInBytes: 5 * 1024 * 1024 * 1024,
           addRandomSuffix: true,
-          tokenPayload: JSON.stringify({ workspaceId: auth.workspace.id, playerId }),
+          tokenPayload: JSON.stringify({ workspaceId: auth.workspace.id, playerId, userId: auth.user.id }),
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         try {
           const payload = JSON.parse(tokenPayload || '{}');
-          if (!validUuid(payload.playerId) || payload.workspaceId !== auth.workspace.id) return;
+          if (!validUuid(payload.playerId) || payload.workspaceId !== auth.workspace.id || payload.userId !== auth.user.id) return;
           await sql`
             insert into player_media (workspace_id, player_id, file_path, blob_url, file_name, mime_type, file_size)
             values (${payload.workspaceId}, ${payload.playerId}::uuid, ${blob.pathname}, ${blob.url}, ${blob.pathname.split('/').pop()}, ${blob.contentType || null}, ${blob.size || null})
