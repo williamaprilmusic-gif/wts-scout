@@ -10,6 +10,27 @@ export const demoPlayers = [
 ];
 
 export const wtsConfigured = true;
+const authListeners = new Set();
+
+function normalizeSession(raw) {
+  if (!raw?.user) return null;
+  return {
+    ...raw,
+    user: {
+      ...raw.user,
+      user_metadata: {
+        full_name: raw.user.full_name,
+        role: raw.user.role,
+      },
+    },
+  };
+}
+
+function notifyAuth(raw) {
+  const session = normalizeSession(raw?.session ?? raw);
+  for (const listener of authListeners) listener(session);
+  return session;
+}
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -30,20 +51,22 @@ async function api(path, options = {}) {
 export async function getSession() {
   try {
     const result = await api('/api/auth');
-    return result.session || null;
+    return normalizeSession(result.session);
   } catch (error) {
     if (error?.status === 401 || error?.status === 404 || error?.status === 503) return null;
     throw error;
   }
 }
 
-export function subscribeToAuth(_callback) {
-  return () => {};
+export function subscribeToAuth(callback) {
+  if (callback) authListeners.add(callback);
+  return () => { if (callback) authListeners.delete(callback); };
 }
 
 export async function signIn(email, password) {
   try {
     const result = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signin', email, password }) });
+    notifyAuth(result);
     return { data: result, error: null };
   } catch (error) {
     return { data: null, error };
@@ -53,6 +76,7 @@ export async function signIn(email, password) {
 export async function signUp(email, password, name, role = 'scout') {
   try {
     const result = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signup', email, password, name, role }) });
+    notifyAuth(result);
     return { data: result, error: null };
   } catch (error) {
     return { data: null, error };
@@ -62,6 +86,7 @@ export async function signUp(email, password, name, role = 'scout') {
 export async function signOut() {
   try {
     await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signout' }) });
+    notifyAuth(null);
     return { error: null };
   } catch (error) {
     return { error };
