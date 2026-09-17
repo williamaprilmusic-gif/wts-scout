@@ -8,7 +8,7 @@ function bodyOf(request) {
 
 export default async function handler(request, response) {
   try {
-    const auth = await requireAuth(request);
+    const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     const workspaceId = auth.workspace.id;
     const sql = db();
 
