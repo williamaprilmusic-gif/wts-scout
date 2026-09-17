@@ -14,13 +14,6 @@ export function db() {
   return client;
 }
 
-export function workspaceIdFrom(request, body = {}) {
-  const url = new URL(request.url);
-  const value = body.workspaceId || body.workspace_id || url.searchParams.get('workspaceId') || request.headers.get('x-wts-workspace-id');
-  if (!value || !/^[a-zA-Z0-9_-]{8,120}$/.test(value)) throw new Error('A valid workspaceId is required.');
-  return value;
-}
-
 export function json(data, status = 200) {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 }
