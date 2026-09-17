@@ -1,13 +1,21 @@
-import { db, json, methodNotAllowed, serverError, workspaceIdFrom } from './_lib/db.js';
+import { db, json, methodNotAllowed, serverError } from './_lib/db.js';
+import { requireAuth } from './_lib/auth.js';
+
+function bodyOf(request) {
+  if (request.body && typeof request.body === 'object') return Promise.resolve(request.body);
+  return request.json();
+}
 
 export default async function handler(request, response) {
   try {
+    const auth = await requireAuth(request);
+    const workspaceId = auth.workspace.id;
+    const sql = db();
+
     if (request.method === 'GET') {
-      const workspaceId = workspaceIdFrom(request);
       const url = new URL(request.url);
       const q = (url.searchParams.get('q') || '').trim();
       const position = (url.searchParams.get('position') || '').trim();
-      const sql = db();
       const rows = q || position
         ? await sql`
             select * from player_profiles
@@ -21,16 +29,16 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'POST') {
-      const body = request.body || await request.json();
-      const workspaceId = workspaceIdFrom(request, body);
+      const body = await bodyOf(request);
       const p = body.player || body;
-      if (!p.full_name) return response?.status ? response.status(400).json({ error: 'full_name is required.' }) : json({ error: 'full_name is required.' }, 400);
-      const sql = db();
+      if (typeof p.full_name !== 'string' || p.full_name.trim().length < 2 || p.full_name.trim().length > 160) {
+        return json({ error: 'full_name must be between 2 and 160 characters.' }, 400);
+      }
       const [row] = await sql`
         insert into player_profiles
         (workspace_id, full_name, age, position, secondary_position, preferred_foot, nationality, city, current_club, league, status, fit_score, minutes, goals, assists, strengths, bio, avatar_url)
         values
-        (${workspaceId}, ${p.full_name}, ${p.age ?? null}, ${p.position ?? null}, ${p.secondary_position ?? null}, ${p.preferred_foot ?? null}, ${p.nationality ?? null}, ${p.city ?? null}, ${p.current_club ?? null}, ${p.league ?? null}, ${p.status ?? 'Emerging'}, ${p.fit_score ?? null}, ${p.minutes ?? 0}, ${p.goals ?? 0}, ${p.assists ?? 0}, ${p.strengths ?? []}, ${p.bio ?? null}, ${p.avatar_url ?? null})
+        (${workspaceId}, ${p.full_name.trim()}, ${p.age ?? null}, ${p.position ?? null}, ${p.secondary_position ?? null}, ${p.preferred_foot ?? null}, ${p.nationality ?? null}, ${p.city ?? null}, ${p.current_club ?? null}, ${p.league ?? null}, ${p.status ?? 'Emerging'}, ${p.fit_score ?? null}, ${p.minutes ?? 0}, ${p.goals ?? 0}, ${p.assists ?? 0}, ${Array.isArray(p.strengths) ? p.strengths : []}, ${p.bio ?? null}, ${p.avatar_url ?? null})
         returning *
       `;
       return response?.status ? response.status(201).json(row) : json(row, 201);
@@ -39,10 +47,8 @@ export default async function handler(request, response) {
     return methodNotAllowed('GET or POST');
   } catch (error) {
     const result = serverError(error);
-    if (response?.status) {
-      const payload = await result.json();
-      return response.status(500).json(payload);
-    }
+    const status = error?.status || 500;
+    if (response?.status) return response.status(status).json(await result.json());
     return result;
   }
 }

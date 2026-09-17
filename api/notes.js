@@ -1,10 +1,18 @@
-import { db, json, methodNotAllowed, serverError, workspaceIdFrom } from './_lib/db.js';
+import { db, json, methodNotAllowed, serverError } from './_lib/db.js';
+import { requireAuth } from './_lib/auth.js';
+
+async function bodyOf(request) {
+  if (request.body && typeof request.body === 'object') return request.body;
+  return request.json();
+}
 
 export default async function handler(request, response) {
   try {
+    const auth = await requireAuth(request);
+    const workspaceId = auth.workspace.id;
     const sql = db();
+
     if (request.method === 'GET') {
-      const workspaceId = workspaceIdFrom(request);
       const url = new URL(request.url);
       const playerId = url.searchParams.get('playerId');
       if (!playerId) return json({ error: 'playerId is required.' }, 400);
@@ -17,13 +25,15 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'POST') {
-      const body = request.body || await request.json();
-      const workspaceId = workspaceIdFrom(request, body);
+      const body = await bodyOf(request);
       const playerId = body.playerId || body.player_id;
-      if (!playerId || !body.note) return json({ error: 'playerId and note are required.' }, 400);
+      if (!playerId || typeof body.note !== 'string' || !body.note.trim()) return json({ error: 'playerId and note are required.' }, 400);
+      if (body.note.length > 10000) return json({ error: 'Scout note is too long.' }, 400);
+      const [player] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${workspaceId} limit 1`;
+      if (!player) return json({ error: 'Player is not in your workspace.' }, 404);
       const [row] = await sql`
         insert into scouting_notes (workspace_id, player_id, note, stage)
-        values (${workspaceId}, ${playerId}::uuid, ${body.note}, ${body.stage || 'watching'})
+        values (${workspaceId}, ${playerId}::uuid, ${body.note.trim()}, ${body.stage || 'watching'})
         returning *
       `;
       return response?.status ? response.status(201).json(row) : json(row, 201);
@@ -32,7 +42,8 @@ export default async function handler(request, response) {
     return methodNotAllowed('GET or POST');
   } catch (error) {
     const result = serverError(error);
-    if (response?.status) return response.status(500).json(await result.json());
+    const status = error?.status || 500;
+    if (response?.status) return response.status(status).json(await result.json());
     return result;
   }
 }

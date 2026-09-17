@@ -1,5 +1,6 @@
 import { handleUpload } from '@vercel/blob/client';
 import { db } from './_lib/db.js';
+import { requireAuth } from './_lib/auth.js';
 
 const allowedContentTypes = [
   'image/jpeg', 'image/png', 'image/webp', 'image/avif',
@@ -13,34 +14,38 @@ function validUuid(value) {
 export default async function handler(request, response) {
   try {
     if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed.' });
-    if (!process.env.BLOB_READ_WRITE_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
+    if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
 
-    const body = request.body || await request.json();
+    const auth = await requireAuth(request);
+    const body = request.body && typeof request.body === 'object' ? request.body : await request.json();
+    const sql = db();
+
     const result = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        const payload = clientPayload ? JSON.parse(clientPayload) : {};
-        if (!payload.workspaceId || !/^[a-zA-Z0-9_-]{8,120}$/.test(payload.workspaceId)) {
-          throw new Error('A valid workspaceId is required.');
-        }
-        if (!validUuid(payload.playerId)) throw new Error('A valid playerId is required.');
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        let payload;
+        try { payload = JSON.parse(clientPayload || '{}'); } catch { throw new Error('Invalid upload payload.'); }
+        const playerId = payload.playerId;
+        if (!validUuid(playerId)) throw new Error('A valid playerId is required.');
+
+        const [player] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
+        if (!player) throw new Error('Player is not in your workspace.');
+
+        const expectedPrefix = `players/${auth.user.id}/${playerId}/`;
+        if (!String(pathname || '').startsWith(expectedPrefix)) throw new Error('Invalid player media path.');
 
         return {
           allowedContentTypes,
           maximumSizeInBytes: 5 * 1024 * 1024 * 1024,
           addRandomSuffix: true,
-          tokenPayload: JSON.stringify({
-            workspaceId: payload.workspaceId,
-            playerId: payload.playerId,
-          }),
+          tokenPayload: JSON.stringify({ workspaceId: auth.workspace.id, playerId, userId: auth.user.id }),
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         try {
           const payload = JSON.parse(tokenPayload || '{}');
-          if (!process.env.DATABASE_URL || !validUuid(payload.playerId)) return;
-          const sql = db();
+          if (!validUuid(payload.playerId) || payload.workspaceId !== auth.workspace.id || payload.userId !== auth.user.id) return;
           await sql`
             insert into player_media (workspace_id, player_id, file_path, blob_url, file_name, mime_type, file_size)
             values (${payload.workspaceId}, ${payload.playerId}::uuid, ${blob.pathname}, ${blob.url}, ${blob.pathname.split('/').pop()}, ${blob.contentType || null}, ${blob.size || null})
@@ -54,6 +59,6 @@ export default async function handler(request, response) {
     return response.status(200).json(result);
   } catch (error) {
     console.error('WTS Blob upload error', error);
-    return response.status(400).json({ error: error instanceof Error ? error.message : 'Upload failed.' });
+    return response.status(error?.status || 400).json({ error: error instanceof Error ? error.message : 'Upload failed.' });
   }
 }

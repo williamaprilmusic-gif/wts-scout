@@ -1,8 +1,5 @@
 import { upload as blobUpload } from '@vercel/blob/client';
 
-const WORKSPACE_ID_KEY = 'wts_scout_workspace_id';
-const WORKSPACE_NAME_KEY = 'wts_scout_workspace_name';
-
 export const demoPlayers = [
   { id: 'demo-1', full_name: 'Rayo Pearce', age: 15, position: 'CAM', secondary_position: 'RW', preferred_foot: 'Right', nationality: 'South Africa', city: 'Cape Town', current_club: 'Liverpool Portland FC', status: 'Emerging', fit_score: 94, minutes: 1120, goals: 11, assists: 14, strengths: ['Vision', 'Control', 'Progression'], bio: 'Creative attacking midfielder with strong spatial awareness and progression through the inside channels.', avatar_url: '' },
   { id: 'demo-2', full_name: 'Mandla Ndlovu', age: 18, position: 'RW', secondary_position: 'LW', preferred_foot: 'Left', nationality: 'South Africa', city: 'Johannesburg', current_club: 'Cape United Academy', status: 'Watchlist', fit_score: 91, minutes: 1380, goals: 13, assists: 9, strengths: ['1v1', 'Acceleration', 'Chance Creation'], bio: 'Direct winger who attacks the full-back and creates separation in transition.', avatar_url: '' },
@@ -13,86 +10,107 @@ export const demoPlayers = [
 ];
 
 export const wtsConfigured = true;
+const authListeners = new Set();
 
-function getWorkspaceId() {
-  let id = localStorage.getItem(WORKSPACE_ID_KEY);
-  if (!id) {
-    id = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '').slice(0, 32);
-    localStorage.setItem(WORKSPACE_ID_KEY, id);
-  }
-  return id;
+function normalizeSession(raw) {
+  if (!raw?.user) return null;
+  return {
+    ...raw,
+    user: {
+      ...raw.user,
+      user_metadata: {
+        full_name: raw.user.full_name,
+        role: raw.user.role,
+      },
+    },
+  };
 }
 
-function getWorkspaceName() {
-  return localStorage.getItem(WORKSPACE_NAME_KEY) || 'William April';
-}
-
-function setWorkspaceName(name) {
-  if (name) localStorage.setItem(WORKSPACE_NAME_KEY, name.trim());
-}
-
-function sessionObject() {
-  const id = getWorkspaceId();
-  return { user: { id, user_metadata: { full_name: getWorkspaceName(), role: 'scout' } } };
+function notifyAuth(raw) {
+  const session = normalizeSession(raw?.session ?? raw);
+  for (const listener of authListeners) listener(session);
+  return session;
 }
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  headers.set('x-wts-workspace-id', getWorkspaceId());
+  headers.set('Accept', 'application/json');
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, { ...options, headers });
+  const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
   const contentType = response.headers.get('content-type') || '';
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();
   if (!response.ok) {
     const message = typeof payload === 'object' && payload?.error ? payload.error : `Request failed with status ${response.status}.`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
 
 export async function getSession() {
-  return sessionObject();
+  try {
+    const result = await api('/api/auth');
+    return normalizeSession(result.session);
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 404 || error?.status === 503) return null;
+    throw error;
+  }
 }
 
 export function subscribeToAuth(callback) {
-  callback?.(sessionObject());
-  return () => {};
+  if (callback) authListeners.add(callback);
+  return () => { if (callback) authListeners.delete(callback); };
 }
 
-export async function signIn(_email, _password) {
-  return { data: sessionObject(), error: null };
+export async function signIn(email, password) {
+  try {
+    const result = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signin', email, password }) });
+    notifyAuth(result);
+    return { data: result, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
 }
 
-export async function signUp(_email, _password, name, _role = 'scout') {
-  setWorkspaceName(name);
-  return { data: { session: sessionObject() }, error: null };
+export async function signUp(email, password, name, role = 'scout') {
+  try {
+    const result = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signup', email, password, name, role }) });
+    notifyAuth(result);
+    return { data: result, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
 }
 
 export async function signOut() {
-  return { error: null };
+  try {
+    await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signout' }) });
+    notifyAuth(null);
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
 }
 
 export async function loadPlayers() {
   try {
     const result = await api('/api/players');
-    return result.players || [];
+    return Array.isArray(result) ? result : result.players || [];
   } catch {
     return demoPlayers;
   }
 }
 
-export async function createPlayer(payload, userId) {
-  const result = await api('/api/players', {
-    method: 'POST',
-    body: JSON.stringify({ ...payload, ownerId: userId, workspaceId: getWorkspaceId() }),
-  });
-  return result.player;
+export async function createPlayer(payload, _userId) {
+  const result = await api('/api/players', { method: 'POST', body: JSON.stringify(payload) });
+  return result?.player || result;
 }
 
 export async function loadWatchlist(_userId) {
   try {
     const result = await api('/api/watchlist');
-    return result.playerIds || [];
+    return Array.isArray(result) ? result : result.playerIds || [];
   } catch {
     return ['demo-1', 'demo-3'];
   }
@@ -100,45 +118,37 @@ export async function loadWatchlist(_userId) {
 
 export async function toggleWatchlist(_userId, playerId, active) {
   if (String(playerId).startsWith('demo-')) return;
-  await api('/api/watchlist', {
-    method: active ? 'DELETE' : 'POST',
-    body: JSON.stringify({ playerId, workspaceId: getWorkspaceId() }),
-  });
+  await api('/api/watchlist', { method: active ? 'DELETE' : 'POST', body: JSON.stringify({ playerId }) });
 }
 
 export async function createScoutingNote(_userId, playerId, note, stage = 'watching') {
   if (String(playerId).startsWith('demo-')) return;
-  await api('/api/notes', {
-    method: 'POST',
-    body: JSON.stringify({ playerId, note, stage, workspaceId: getWorkspaceId() }),
-  });
+  await api('/api/notes', { method: 'POST', body: JSON.stringify({ playerId, note, stage }) });
 }
 
 export async function loadNotes(_userId, playerId) {
   if (String(playerId).startsWith('demo-')) return [];
   try {
     const result = await api(`/api/notes?playerId=${encodeURIComponent(playerId)}`);
-    return result.notes || [];
+    return Array.isArray(result) ? result : result.notes || [];
   } catch {
     return [];
   }
 }
 
-export async function uploadPlayerMedia(_userId, playerId, file) {
+export async function uploadPlayerMedia(userId, playerId, file) {
   if (String(playerId).startsWith('demo-')) throw new Error('Media uploads require a saved database player profile.');
+  if (!userId) throw new Error('Authentication is required for media uploads.');
   const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
-  return blobUpload(`players/${getWorkspaceId()}/${playerId}/${Date.now()}-${safeName}`, file, {
+  return blobUpload(`players/${userId}/${playerId}/${Date.now()}-${safeName}`, file, {
     access: 'private',
     handleUploadUrl: '/api/upload',
-    clientPayload: JSON.stringify({ workspaceId: getWorkspaceId(), playerId }),
+    clientPayload: JSON.stringify({ playerId }),
     multipart: file.size > 4 * 1024 * 1024,
   });
 }
 
 export async function saveReport(_userId, playerId, report) {
   if (String(playerId).startsWith('demo-')) return;
-  await api('/api/reports', {
-    method: 'POST',
-    body: JSON.stringify({ playerId, title: report.title, content: report.content, fitScore: report.fitScore || null, workspaceId: getWorkspaceId() }),
-  });
+  await api('/api/reports', { method: 'POST', body: JSON.stringify({ playerId, title: report.title, content: report.content, fitScore: report.fitScore || null }) });
 }
