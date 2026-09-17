@@ -16,7 +16,7 @@ export default async function handler(request, response) {
     if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed.' });
     if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
 
-    const auth = await requireAuth(request);
+    const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     const body = request.body && typeof request.body === 'object' ? request.body : await request.json();
     const sql = db();
 
