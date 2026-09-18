@@ -74,11 +74,24 @@ export default async function handler(request, response) {
   }
 
   const database = await checkDatabase();
-  const blobConfigured = configured('BLOB_READ_WRITE_TOKEN') || configured('VERCEL_OIDC_TOKEN');
+  const blobTokenConfigured = configured('BLOB_READ_WRITE_TOKEN') || configured('VERCEL_OIDC_TOKEN');
+  const blobStoreConfigured = configured('BLOB_STORE_ID') || configured('BLOB_READ_WRITE_TOKEN');
   const aiConfigured = configured('AI_GATEWAY_API_KEY') || configured('VERCEL_OIDC_TOKEN');
-  const blob = { provider: 'Vercel Blob', configured: blobConfigured, healthy: blobConfigured };
-  const ai = { provider: 'Vercel AI Gateway', configured: aiConfigured, healthy: aiConfigured };
-  const healthy = database.configured && database.healthy && database.schemaReady;
+  const blobConfigured = blobTokenConfigured && blobStoreConfigured;
+  const blob = {
+    provider: 'Vercel Blob',
+    configured: blobConfigured,
+    healthy: blobConfigured,
+    auth: configured('BLOB_READ_WRITE_TOKEN') ? 'api-key' : configured('VERCEL_OIDC_TOKEN') ? 'oidc' : 'missing',
+    store: blobStoreConfigured ? 'connected' : 'missing',
+  };
+  const ai = {
+    provider: 'Vercel AI Gateway',
+    configured: aiConfigured,
+    healthy: aiConfigured,
+    auth: configured('AI_GATEWAY_API_KEY') ? 'api-key' : configured('VERCEL_OIDC_TOKEN') ? 'oidc' : 'missing',
+  };
+  const healthy = database.configured && database.healthy && database.schemaReady && blob.healthy && ai.healthy;
 
   return sendJson(
     response,
@@ -86,7 +99,7 @@ export default async function handler(request, response) {
       ok: healthy,
       architecture: 'GitHub → Vercel → Database → Blob Storage → AI',
       services: { database, blob, ai },
-      version: '0.4.0',
+      version: '0.4.1',
       timestamp: new Date().toISOString(),
     },
     healthy ? 200 : 503,
