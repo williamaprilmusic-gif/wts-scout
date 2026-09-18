@@ -28,11 +28,11 @@ WTS Scout now has application-level email/password authentication backed by Neon
 - Protected player, shortlist, scouting-note, scouting-report, AI and Blob endpoints derive the workspace from the authenticated session.
 - Browser-provided `workspaceId` values and workspace headers are no longer trusted by protected APIs.
 
-This gives WTS Scout a real application identity layer without adding Supabase or a separate authentication vendor.
+This gives WTS Scout a real application identity layer using the built-in application authentication service.
 
 ## What changed
 
-- Removed the Supabase SDK and Supabase environment requirements.
+- Removed the legacy external authentication/database SDK and its environment requirements.
 - Added Neon Postgres service boundary and unified schema at `db/schema.sql`.
 - Added `api/auth.js` plus `api/_lib/auth.js` for signup, sign-in, sign-out and session validation.
 - Added Vercel Functions for players, shortlists, scouting notes and reports with workspace authorization.
@@ -45,9 +45,9 @@ This gives WTS Scout a real application identity layer without adding Supabase o
 ## Provision the services
 
 1. Create/install a **Neon** database integration in the Vercel project and make `DATABASE_URL` available to Production/Preview.
-2. Create a **private Vercel Blob** store connected to the project and make `BLOB_READ_WRITE_TOKEN` available where required.
+2. Create a **private Vercel Blob** store connected to the project; current Vercel Blob setups can use OIDC plus the connected store ID, while legacy token stores use `BLOB_READ_WRITE_TOKEN`.
 3. Run `db/schema.sql` against Neon. This includes both the application data schema and authentication tables.
-4. Enable Vercel AI Gateway and provide `AI_GATEWAY_API_KEY` when API-key authentication is used, or use the supported Vercel OIDC flow.
+4. Enable Vercel AI Gateway; use the supported Vercel OIDC flow on Vercel or `AI_GATEWAY_API_KEY` where a persistent key is required.
 5. Redeploy `main`.
 
 Never commit real secrets. `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` and `AI_GATEWAY_API_KEY` are server-side values and must stay in Vercel environment variables.
