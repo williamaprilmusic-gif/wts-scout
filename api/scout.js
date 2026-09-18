@@ -1,7 +1,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 import { db } from './_lib/db.js';
-import { requireAuth } from './_lib/auth.js';
+import { requireAuth, assertSameOrigin } from './_lib/auth.js';
 
 const reportSchema = z.object({
   summary: z.string(),
@@ -18,6 +18,7 @@ export default async function handler(request, response) {
 
   try {
     const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
+    assertSameOrigin(request);
     const body = request.body || await request.json();
     if (!body?.player?.id) return response.status(400).json({ error: 'A saved player profile is required.' });
     const [player] = await db()`select * from player_profiles where id = ${body.player.id}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
