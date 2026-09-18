@@ -20,7 +20,7 @@ export default async function handler(request, response) {
     const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     assertSameOrigin(request);
     const body = request.body || await request.json();
-    if (!body?.player?.id) return response.status(400).json({ error: 'A saved player profile is required.' });
+    if (!body?.player?.id || !/^[0-9a-fA-F-]{36}$/.test(body.player.id)) return response.status(400).json({ error: 'A valid saved player profile is required.' });
     const [player] = await db()`select * from player_profiles where id = ${body.player.id}::uuid and workspace_id = ${auth.workspace.id} limit 1`;
     if (!player) return response.status(404).json({ error: 'Player is not in your workspace.' });
 
