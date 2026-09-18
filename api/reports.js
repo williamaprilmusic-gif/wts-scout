@@ -22,7 +22,9 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'POST') {
-      await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
+      if (!['owner', 'scout', 'analyst'].includes(auth.workspace.role)) {
+        return json({ error: 'You do not have permission to create scouting reports.' }, 403);
+      }
       const body = await bodyOf(request);
       const playerId = body.playerId || body.player_id;
       const report = body.report || body;
