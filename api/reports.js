@@ -29,13 +29,16 @@ export default async function handler(request, response) {
       const body = await bodyOf(request);
       const playerId = body.playerId || body.player_id;
       const report = body.report || body;
-      if (!playerId || !report.title) return json({ error: 'playerId and report.title are required.' }, 400);
+      if (!playerId || !/^[0-9a-fA-F-]{36}$/.test(playerId) || !report || typeof report !== 'object' || Array.isArray(report) || typeof report.title !== 'string' || !report.title.trim()) return json({ error: 'A valid playerId and report.title are required.' }, 400);
+      if (report.title.length > 240) return json({ error: 'Report title is too long.' }, 400);
+      const fitScore = report.fitScore ?? report.fit_score ?? null;
+      if (fitScore !== null && (!Number.isInteger(fitScore) || fitScore < 0 || fitScore > 100)) return json({ error: 'fitScore must be between 0 and 100.' }, 400);
       if (JSON.stringify(report).length > 500000) return json({ error: 'Report payload is too large.' }, 400);
       const [player] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${workspaceId} limit 1`;
       if (!player) return json({ error: 'Player is not in your workspace.' }, 404);
       const [row] = await sql`
         insert into scouting_reports (workspace_id, player_id, title, content, fit_score)
-        values (${workspaceId}, ${playerId}::uuid, ${report.title}, ${JSON.stringify(report.content ?? report)}::jsonb, ${report.fitScore ?? report.fit_score ?? null})
+        values (${workspaceId}, ${playerId}::uuid, ${report.title}, ${JSON.stringify(report.content ?? report)}::jsonb, ${fitScore})
         returning *
       `;
       return response?.status ? response.status(201).json(row) : json(row, 201);
