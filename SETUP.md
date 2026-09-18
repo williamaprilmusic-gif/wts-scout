@@ -16,13 +16,13 @@ Vercel CLI example:
 vercel install neon --name wts-scout-db --plan free -e production -e preview
 ```
 
-Then run the unified schema:
+The repository contains the unified schema in:
 
 ```text
 db/schema.sql
 ```
 
-That schema includes authentication users, workspaces, memberships, sessions and the scouting data tables.
+Apply that schema to the connected Neon database. It includes authentication users, workspaces, memberships, sessions and the scouting data tables.
 
 Required variable:
 
@@ -57,17 +57,13 @@ Create a **private** Vercel Blob store and connect it to the `wts-scout` project
 
 The upload endpoint validates the authenticated user, workspace membership and player ownership before it issues a Blob upload token. Completed media metadata is stored in Neon.
 
-Required variable for token-based Blob stores:
-
-```text
-BLOB_READ_WRITE_TOKEN
-```
-
-Newer Blob setups may use Vercel OIDC instead of a static token.
+For current Vercel Blob OIDC stores, connect the store to the project; Vercel supplies short-lived OIDC credentials and the connected store ID (`BLOB_STORE_ID`). Older/static-token stores can use `BLOB_READ_WRITE_TOKEN` instead. Vercel documents Blob OIDC as the default for new stores.
 
 ## 4. AI — Vercel AI Gateway
 
 Configure Vercel AI Gateway for the project.
+
+On Vercel deployments, AI Gateway can authenticate through the project's OIDC token, so a persistent gateway key is not required for production. A key remains supported for local development or environments without OIDC.
 
 Required variable when API-key authentication is used:
 
@@ -89,8 +85,9 @@ Keep these values server-side in Vercel Project Settings:
 
 ```text
 DATABASE_URL
-BLOB_READ_WRITE_TOKEN
-AI_GATEWAY_API_KEY
+BLOB_STORE_ID (OIDC Blob stores)
+BLOB_READ_WRITE_TOKEN (legacy Blob stores only)
+AI_GATEWAY_API_KEY (optional on Vercel when OIDC is available)
 WTS_SCOUT_MODEL
 ```
 
