@@ -47,7 +47,7 @@ The current system provides:
 - Workspace membership records for authorization
 - Server-derived workspace context for player, shortlist, notes, reports, AI and media APIs
 
-No Supabase project is required.
+No external hosted authentication project is required; WTS Scout owns its application authentication layer.
 
 Before a large public launch, add email verification, password reset/recovery, login abuse/rate limiting, audit logs and a workspace invitation flow.
 
