@@ -1,6 +1,6 @@
 import { handleUpload } from '@vercel/blob/client';
 import { db } from './_lib/db.js';
-import { requireAuth } from './_lib/auth.js';
+import { requireAuth, assertSameOrigin } from './_lib/auth.js';
 
 const allowedContentTypes = [
   'image/jpeg', 'image/png', 'image/webp', 'image/avif',
@@ -14,6 +14,7 @@ function validUuid(value) {
 export default async function handler(request, response) {
   try {
     if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed.' });
+    assertSameOrigin(request);
     if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
 
     const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
