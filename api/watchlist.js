@@ -22,7 +22,7 @@ export default async function handler(request, response) {
     await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     const body = await bodyOf(request);
     const playerId = body.playerId || body.player_id;
-    if (!playerId) return json({ error: 'playerId is required.' }, 400);
+    if (!playerId || !/^[0-9a-fA-F-]{36}$/.test(playerId)) return json({ error: 'A valid playerId is required.' }, 400);
 
     const [ownedPlayer] = await sql`select id from player_profiles where id = ${playerId}::uuid and workspace_id = ${workspaceId} limit 1`;
     if (!ownedPlayer) return json({ error: 'Player is not in your workspace.' }, 404);
