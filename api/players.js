@@ -31,9 +31,20 @@ export default async function handler(request, response) {
     if (request.method === 'POST') {
       const body = await bodyOf(request);
       const p = body.player || body;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return json({ error: 'Invalid player payload.' }, 400);
       if (typeof p.full_name !== 'string' || p.full_name.trim().length < 2 || p.full_name.trim().length > 160) {
         return json({ error: 'full_name must be between 2 and 160 characters.' }, 400);
       }
+      const numeric = ['age', 'fit_score', 'minutes', 'goals', 'assists'];
+      for (const field of numeric) {
+        if (p[field] !== undefined && p[field] !== null && (!Number.isInteger(p[field]) || p[field] < 0)) {
+          return json({ error: `${field} must be a non-negative integer.` }, 400);
+        }
+      }
+      if (p.age !== undefined && p.age !== null && p.age > 100) return json({ error: 'age is out of range.' }, 400);
+      if (p.fit_score !== undefined && p.fit_score !== null && p.fit_score > 100) return json({ error: 'fit_score must be between 0 and 100.' }, 400);
+      if (Array.isArray(p.strengths) && p.strengths.length > 20) return json({ error: 'Too many strengths.' }, 400);
+      if (p.bio !== undefined && p.bio !== null && (typeof p.bio !== 'string' || p.bio.length > 20000)) return json({ error: 'bio is too long.' }, 400);
       const [row] = await sql`
         insert into player_profiles
         (workspace_id, full_name, age, position, secondary_position, preferred_foot, nationality, city, current_club, league, status, fit_score, minutes, goals, assists, strengths, bio, avatar_url)
