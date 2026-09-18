@@ -24,5 +24,5 @@ export function methodNotAllowed(allowed) {
 
 export function serverError(error) {
   console.error(error);
-  return json({ error: error instanceof Error ? error.message : 'Internal server error.' }, 500);
+  return json({ error: 'Internal server error.' }, 500);
 }
