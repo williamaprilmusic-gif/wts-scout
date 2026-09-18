@@ -62,7 +62,7 @@ for (const dependency of ['@neondatabase/serverless', '@vercel/blob', 'ai']) {
 }
 
 const setup = await readFile('SETUP.md', 'utf8');
-for (const variable of ['DATABASE_URL', 'BLOB_READ_WRITE_TOKEN', 'AI_GATEWAY_API_KEY']) {
+for (const variable of ['DATABASE_URL', 'BLOB_STORE_ID', 'GEMINI_API_KEY']) {
   if (!setup.includes(variable)) {
     throw new Error(`SETUP.md does not document required server-side variable: ${variable}`);
   }
