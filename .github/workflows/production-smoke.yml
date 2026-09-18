@@ -22,7 +22,7 @@ jobs:
 
       - name: Check production health endpoint
         env:
-          WTS_PRODUCTION_URL: https://wts-scout.vercel.app
+          WTS_PRODUCTION_URL: https://wts-scout-william-april.vercel.app
         run: |
           set -euo pipefail
 
