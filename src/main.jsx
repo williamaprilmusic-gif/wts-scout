@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Activity, ArrowUpRight, Bell, Bookmark, Building2, CheckCircle2, ChevronDown, ChevronRight, FileText, GraduationCap, LayoutDashboard, LogIn, LogOut, Menu, Plus, Radar, Search, Settings2, ShieldCheck, Sparkles, Target, Upload, Users, X, Zap } from 'lucide-react';
 import './styles.css';
-import { createPlayer, createScoutingNote, demoPlayers, getSession, loadNotes, loadPlayers, loadWatchlist, saveReport, signIn, signOut, signUp, wtsConfigured, subscribeToAuth, toggleWatchlist, uploadPlayerMedia } from './supabase';
+import { createPlayer, createScoutingNote, demoPlayers, getSession, loadNotes, loadPlayers, loadWatchlist, saveReport, signIn, signOut, signUp, wtsConfigured, subscribeToAuth, toggleWatchlist, uploadPlayerMedia } from './wts-api.js';
 
 const nav = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
