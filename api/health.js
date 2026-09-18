@@ -51,14 +51,13 @@ export default async function handler(request, response) {
   };
   const aiStatus = getScoutingProviderStatus();
   const ai = {
-    provider: aiStatus.provider === 'gemini' ? 'Google Gemini API' : aiStatus.provider,
-    model: aiStatus.model, configured: aiStatus.configured, healthy: aiStatus.configured,
-    auth: aiStatus.configured ? 'api-key' : 'missing',
+    provider: 'Vercel AI Gateway', model: aiStatus.model, configured: aiStatus.configured, healthy: aiStatus.configured,
+    auth: aiStatus.auth,
   };
   const healthy = database.configured && database.healthy && database.schemaReady && blob.healthy && ai.healthy;
   return sendJson(response, {
     ok: healthy,
-    architecture: 'GitHub → Vercel → Database → Blob Storage → AI',
-    services: { database, blob, ai }, version: '0.5.0', timestamp: new Date().toISOString(),
+    architecture: 'GitHub → Vercel → Neon Postgres → Vercel Blob → Vercel AI Gateway',
+    services: { database, blob, ai }, version: '0.6.0', timestamp: new Date().toISOString(),
   }, healthy ? 200 : 503);
 }

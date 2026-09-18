@@ -3,18 +3,12 @@
 WTS Scout uses this production architecture:
 
 ```text
-GitHub → Vercel → Neon Postgres → Vercel Blob → AI Provider
+GitHub → Vercel → Neon Postgres → Vercel Blob → Vercel AI Gateway
 ```
 
 ## 1. Database — Neon Postgres
 
 Provision a Neon database through the Vercel Marketplace and connect it to the `wts-scout` project for Production and Preview environments.
-
-Vercel CLI example:
-
-```bash
-vercel install neon --name wts-scout-db --plan free -e production -e preview
-```
 
 The repository contains the unified schema in:
 
@@ -59,22 +53,18 @@ The upload endpoint validates the authenticated user, workspace membership and p
 
 For current Vercel Blob OIDC stores, connect the store to the project; Vercel supplies short-lived OIDC credentials and the connected store ID (`BLOB_STORE_ID`). Older/static-token stores can use `BLOB_READ_WRITE_TOKEN` instead.
 
-## 4. AI — Free Gemini development path + optional Vercel AI Gateway
+## 4. AI — Vercel AI Gateway
 
-WTS Scout supports two AI providers behind the same `/api/scout` endpoint:
+Production scouting generation uses Vercel AI Gateway through its OpenAI-compatible Chat Completions endpoint. This provides a single managed integration and leaves model routing behind a server-side adapter.
 
-- **Gemini API** for a free development path. Set `GEMINI_API_KEY` and optionally `WTS_SCOUT_PROVIDER=gemini`.
-- **Vercel AI Gateway** for a managed multi-provider production path. Set `WTS_SCOUT_PROVIDER=gateway` and use `AI_GATEWAY_API_KEY` or Vercel OIDC where supported.
-
-Default behavior selects Gemini when `GEMINI_API_KEY` is present; otherwise it falls back to AI Gateway.
-
-Recommended free-development model:
+Required variables:
 
 ```text
-WTS_SCOUT_GEMINI_MODEL=gemini-2.5-flash-lite
+AI_GATEWAY_API_KEY
+WTS_SCOUT_MODEL=google/gemini-2.5-flash-lite
 ```
 
-The Gemini route uses structured JSON output and validates the result again with Zod before returning it.
+On Vercel, a supported OIDC configuration may be used instead of a static gateway key.
 
 ## 5. Environment variables
 
@@ -84,11 +74,8 @@ Keep these values server-side in Vercel Project Settings:
 DATABASE_URL
 BLOB_STORE_ID (OIDC Blob stores)
 BLOB_READ_WRITE_TOKEN (legacy Blob stores only)
-GEMINI_API_KEY (free AI development path)
-WTS_SCOUT_PROVIDER (gemini or gateway)
-WTS_SCOUT_GEMINI_MODEL
-AI_GATEWAY_API_KEY (optional when using gateway)
-WTS_SCOUT_MODEL (optional gateway model override)
+AI_GATEWAY_API_KEY (or supported Vercel OIDC)
+WTS_SCOUT_MODEL
 ```
 
 Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
@@ -112,16 +99,16 @@ Use:
 /api/health
 ```
 
-The endpoint checks database connectivity and reports whether Blob and the selected AI provider are configured. It does not expose secret values.
+The endpoint checks database connectivity/schema readiness and reports whether Blob and Vercel AI Gateway are configured. It does not expose secret values.
 
 ## 8. Production checklist
 
-- Neon database provisioned
+- Neon database provisioned through Vercel Marketplace
 - `db/schema.sql` applied successfully
 - `DATABASE_URL` configured in Production and Preview
 - Private Vercel Blob store connected
 - Blob token/OIDC configured
-- Gemini free AI path tested OR AI Gateway configured
+- Vercel AI Gateway configured
 - Real authentication enabled
 - Workspace authorization enabled on all protected APIs
 - GitHub CI production build passing

@@ -11,94 +11,95 @@ export const scoutingReportSchema = z.object({
 });
 
 const reportJsonSchema = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string' },
-    strengths: { type: 'array', items: { type: 'string' } },
-    developmentAreas: { type: 'array', items: { type: 'string' } },
-    tacticalFit: { type: 'string' },
-    evidenceToVerify: { type: 'array', items: { type: 'string' } },
-    nextObservation: { type: 'string' },
-    fitScore: { type: 'integer', minimum: 0, maximum: 100 },
+  name: 'scouting_report',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string' },
+      strengths: { type: 'array', items: { type: 'string' } },
+      developmentAreas: { type: 'array', items: { type: 'string' } },
+      tacticalFit: { type: 'string' },
+      evidenceToVerify: { type: 'array', items: { type: 'string' } },
+      nextObservation: { type: 'string' },
+      fitScore: { type: 'integer', minimum: 0, maximum: 100 },
+    },
+    required: ['summary', 'strengths', 'developmentAreas', 'tacticalFit', 'evidenceToVerify', 'nextObservation', 'fitScore'],
+    additionalProperties: false,
   },
-  required: ['summary', 'strengths', 'developmentAreas', 'tacticalFit', 'evidenceToVerify', 'nextObservation', 'fitScore'],
-  additionalProperties: false,
 };
 
-const PROVIDERS = Object.freeze({
-  GEMINI: 'gemini',
-});
+const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
+const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 
-function providerFromEnv() {
-  const provider = (process.env.WTS_SCOUT_PROVIDER || PROVIDERS.GEMINI).toLowerCase();
-  if (provider !== PROVIDERS.GEMINI) {
-    throw Object.assign(new Error(`Unsupported WTS Scout AI provider: ${provider}`), { status: 503 });
-  }
-  return provider;
+function modelFromEnv() {
+  return process.env.WTS_SCOUT_MODEL || DEFAULT_MODEL;
 }
 
-async function generateWithGemini({ prompt, system }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw Object.assign(new Error('Gemini is not configured.'), { status: 503 });
+function gatewayConfigured() {
+  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+}
 
-  const model = process.env.WTS_SCOUT_GEMINI_MODEL || 'gemini-2.5-flash-lite';
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json',
-          responseSchema: reportJsonSchema,
-        },
-      }),
-    },
-  );
+async function generateWithGateway({ prompt, system }) {
+  if (!gatewayConfigured()) {
+    throw Object.assign(new Error('Vercel AI Gateway is not configured.'), { status: 503 });
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (process.env.AI_GATEWAY_API_KEY) headers.Authorization = `Bearer ${process.env.AI_GATEWAY_API_KEY}`;
+  if (process.env.VERCEL_OIDC_TOKEN) headers['x-vercel-oidc-token'] = process.env.VERCEL_OIDC_TOKEN;
+
+  const response = await fetch(GATEWAY_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: modelFromEnv(),
+      temperature: 0.2,
+      max_tokens: 1400,
+      response_format: { type: 'json_schema', json_schema: reportJsonSchema },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: prompt },
+      ],
+    }),
+  });
 
   if (!response.ok) {
     const details = await response.text();
-    console.error('WTS Gemini request failed', response.status, details.slice(0, 1000));
-    throw Object.assign(new Error('Gemini request failed.'), { status: response.status === 429 ? 429 : 502 });
+    console.error('WTS AI Gateway request failed', response.status, details.slice(0, 1000));
+    throw Object.assign(new Error('AI Gateway request failed.'), { status: response.status === 429 ? 429 : 502 });
   }
 
   const payload = await response.json();
-  const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim();
-  if (!text) throw Object.assign(new Error('Gemini returned no report.'), { status: 502 });
+  const raw = payload?.choices?.[0]?.message?.content;
+  const text = Array.isArray(raw) ? raw.map((part) => part?.text || '').join('') : raw;
+  if (!text || typeof text !== 'string') throw Object.assign(new Error('AI Gateway returned no report.'), { status: 502 });
 
-  return scoutingReportSchema.parse(JSON.parse(text));
+  try {
+    return scoutingReportSchema.parse(JSON.parse(text));
+  } catch (error) {
+    console.error('WTS AI Gateway returned invalid report JSON', error);
+    throw Object.assign(new Error('AI Gateway returned an invalid report.'), { status: 502 });
+  }
 }
 
 export function getScoutingAI() {
-  const provider = providerFromEnv();
-
-  // Provider interface: the application only depends on this contract.
-  // A future paid adapter can implement the same generateStructured method
-  // without changing API routes, persistence, or UI code.
-  if (provider === PROVIDERS.GEMINI) {
-    return {
-      provider,
-      model: process.env.WTS_SCOUT_GEMINI_MODEL || 'gemini-2.5-flash-lite',
-      async generateStructured(input) {
-        return generateWithGemini(input);
-      },
-    };
-  }
-
-  throw Object.assign(new Error('No WTS Scout AI provider is available.'), { status: 503 });
+  return {
+    provider: 'vercel-ai-gateway',
+    model: modelFromEnv(),
+    async generateStructured(input) {
+      return generateWithGateway(input);
+    },
+  };
 }
 
 export function getScoutingProviderStatus() {
-  const provider = providerFromEnv();
   return {
-    provider,
-    model: process.env.WTS_SCOUT_GEMINI_MODEL || 'gemini-2.5-flash-lite',
-    configured: Boolean(process.env.GEMINI_API_KEY),
+    provider: 'vercel-ai-gateway',
+    model: modelFromEnv(),
+    configured: gatewayConfigured(),
+    auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : process.env.VERCEL_OIDC_TOKEN ? 'oidc' : 'missing',
   };
 }

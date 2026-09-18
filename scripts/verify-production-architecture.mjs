@@ -25,13 +25,12 @@ const dependencies = {...(packageJson.dependencies ?? {}), ...(packageJson.devDe
 for (const dependency of ['@neondatabase/serverless','@vercel/blob','zod']) {
   if (!dependencies[dependency]) throw new Error(`Missing required production dependency: ${dependency}`);
 }
-if (dependencies.ai) throw new Error('Paid-provider SDK should not be a required WTS Scout dependency; use the provider adapter interface.');
 const setup = await readFile('SETUP.md','utf8');
-for (const variable of ['DATABASE_URL','BLOB_STORE_ID','GEMINI_API_KEY']) {
+for (const variable of ['DATABASE_URL','BLOB_STORE_ID','AI_GATEWAY_API_KEY','WTS_SCOUT_MODEL']) {
   if (!setup.includes(variable)) throw new Error(`SETUP.md does not document required server-side variable: ${variable}`);
 }
 const aiSource = await readFile('api/_lib/ai.js','utf8');
-for (const marker of ['getScoutingAI','generateStructured','GEMINI_API_KEY','WTS_SCOUT_GEMINI_MODEL']) {
-  if (!aiSource.includes(marker)) throw new Error(`AI provider interface missing marker: ${marker}`);
+for (const marker of ['getScoutingAI','generateStructured','AI_GATEWAY_API_KEY','WTS_SCOUT_MODEL','ai-gateway.vercel.sh']) {
+  if (!aiSource.includes(marker)) throw new Error(`AI Gateway provider interface missing marker: ${marker}`);
 }
 console.log('WTS Scout production architecture checks passed.');
