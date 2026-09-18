@@ -1,5 +1,5 @@
 import { db, json, methodNotAllowed, serverError } from './_lib/db.js';
-import { authErrorStatus, clearSessionCookie, createSession, destroySession, hashPassword, normalizeEmail, requireAuth, sessionCookie, verifyPassword } from './_lib/auth.js';
+import { authErrorStatus, clearSessionCookie, createSession, destroySession, hashPassword, normalizeEmail, requireAuth, sessionCookie, verifyPassword, assertSameOrigin } from './_lib/auth.js';
 
 const publicRoles = new Set(['scout', 'player', 'club', 'academy']);
 
@@ -33,6 +33,7 @@ export default async function handler(request, response) {
     }
 
     if (request.method !== 'POST') return methodNotAllowed('GET or POST');
+    assertSameOrigin(request);
     const body = await bodyOf(request);
     const action = String(body?.action || '').toLowerCase();
     const sql = db();
