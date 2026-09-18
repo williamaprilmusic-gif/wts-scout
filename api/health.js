@@ -76,7 +76,10 @@ export default async function handler(request, response) {
   const database = await checkDatabase();
   const blobTokenConfigured = configured('BLOB_READ_WRITE_TOKEN') || configured('VERCEL_OIDC_TOKEN');
   const blobStoreConfigured = configured('BLOB_STORE_ID') || configured('BLOB_READ_WRITE_TOKEN');
-  const aiConfigured = configured('AI_GATEWAY_API_KEY') || configured('VERCEL_OIDC_TOKEN');
+  const aiProvider = process.env.WTS_SCOUT_PROVIDER || (configured('GEMINI_API_KEY') ? 'gemini' : 'gateway');
+  const aiConfigured = aiProvider === 'gemini'
+    ? configured('GEMINI_API_KEY')
+    : configured('AI_GATEWAY_API_KEY') || configured('VERCEL_OIDC_TOKEN');
   const blobConfigured = blobTokenConfigured && blobStoreConfigured;
   const blob = {
     provider: 'Vercel Blob',
@@ -86,10 +89,10 @@ export default async function handler(request, response) {
     store: blobStoreConfigured ? 'connected' : 'missing',
   };
   const ai = {
-    provider: 'Vercel AI Gateway',
+    provider: aiProvider === 'gemini' ? 'Google Gemini API' : 'Vercel AI Gateway',
     configured: aiConfigured,
     healthy: aiConfigured,
-    auth: configured('AI_GATEWAY_API_KEY') ? 'api-key' : configured('VERCEL_OIDC_TOKEN') ? 'oidc' : 'missing',
+    auth: aiProvider === 'gemini' ? (configured('GEMINI_API_KEY') ? 'api-key' : 'missing') : (configured('AI_GATEWAY_API_KEY') ? 'api-key' : configured('VERCEL_OIDC_TOKEN') ? 'oidc' : 'missing'),
   };
   const healthy = database.configured && database.healthy && database.schemaReady && blob.healthy && ai.healthy;
 
