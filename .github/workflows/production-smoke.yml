@@ -1,0 +1,60 @@
+name: WTS Scout Production Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+
+concurrency:
+  group: wts-scout-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Wait for Vercel deployment propagation
+        run: sleep 30
+
+      - name: Check production health endpoint
+        env:
+          WTS_PRODUCTION_URL: https://wts-scout.vercel.app
+        run: |
+          set -euo pipefail
+
+          url="$WTS_PRODUCTION_URL/api/health"
+          response_file="$(mktemp)"
+          status=""
+
+          for attempt in $(seq 1 12); do
+            status="$(curl -sS -o "$response_file" -w '%{http_code}' --max-time 20 "$url" || true)"
+
+            if [ "$status" = "200" ]; then
+              break
+            fi
+
+            echo "Health endpoint attempt $attempt returned HTTP $status"
+            sleep 15
+          done
+
+          echo "Final HTTP status: $status"
+          cat "$response_file"
+
+          test "$status" = "200"
+
+          jq -e '
+            .ok == true and
+            .services.database.configured == true and
+            .services.database.healthy == true and
+            .services.database.schemaReady == true and
+            .services.blob.configured == true and
+            .services.blob.healthy == true and
+            .services.ai.configured == true and
+            .services.ai.healthy == true
+          ' "$response_file" >/dev/null
+
+          echo "WTS Scout production smoke test passed."
