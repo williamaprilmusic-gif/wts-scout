@@ -16,6 +16,7 @@ export default async function handler(request, response) {
     if (request.method === 'GET') {
       const url = new URL(request.url);
       const playerId = url.searchParams.get('playerId');
+      if (playerId && !/^[0-9a-fA-F-]{36}$/.test(playerId)) return json({ error: 'A valid playerId is required.' }, 400);
       const rows = playerId
         ? await sql`select * from scouting_reports where workspace_id = ${workspaceId} and player_id = ${playerId}::uuid order by created_at desc`
         : await sql`select * from scouting_reports where workspace_id = ${workspaceId} order by created_at desc`;
