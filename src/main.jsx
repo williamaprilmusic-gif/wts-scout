@@ -33,11 +33,11 @@ function App() {
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    if (!supabaseConfigured) return undefined;
+    if (!wtsConfigured) return undefined;
     getSession().then(s => { setSession(s); setReady(true); });
     return subscribeToAuth(s => setSession(s));
   }, []);
-  useEffect(() => { if (!supabaseConfigured) { localStorage.setItem('wts_demo_players', JSON.stringify(players)); localStorage.setItem('wts_demo_watchlist', JSON.stringify(watchlist)); } }, [players, watchlist]);
+  useEffect(() => { if (!wtsConfigured) { localStorage.setItem('wts_demo_players', JSON.stringify(players)); localStorage.setItem('wts_demo_watchlist', JSON.stringify(watchlist)); } }, [players, watchlist]);
   useEffect(() => { if (!session?.user?.id) return; Promise.all([loadPlayers(), loadWatchlist(session.user.id)]).then(([rows, ids]) => { setPlayers(rows); setWatchlist(ids); }).catch(error => showToast(error.message)); }, [session]);
 
   function showToast(message) { setToast(message); window.setTimeout(() => setToast(''), 3500); }
