@@ -11,7 +11,13 @@ function sendJson(response, data, status = 200) {
 
 async function checkDatabase() {
   if (!isDbConfigured()) {
-    return { provider: 'Neon Postgres', configured: false, healthy: false, schemaReady: false };
+    return {
+      provider: 'Neon Postgres',
+      configured: false,
+      healthy: false,
+      schemaReady: false,
+      requiredTables: {},
+    };
   }
 
   try {
@@ -23,20 +29,42 @@ async function checkDatabase() {
         to_regclass('public.workspaces') is not null as workspaces_ready,
         to_regclass('public.workspace_members') is not null as memberships_ready,
         to_regclass('public.app_sessions') is not null as sessions_ready,
-        to_regclass('public.player_profiles') is not null as players_ready
+        to_regclass('public.player_profiles') is not null as players_ready,
+        to_regclass('public.watchlists') is not null as watchlists_ready,
+        to_regclass('public.scouting_notes') is not null as notes_ready,
+        to_regclass('public.scouting_reports') is not null as reports_ready,
+        to_regclass('public.player_media') is not null as media_ready
     `;
-    const schemaReady = Boolean(
-      schema?.users_ready &&
-      schema?.workspaces_ready &&
-      schema?.memberships_ready &&
-      schema?.sessions_ready &&
-      schema?.players_ready,
-    );
 
-    return { provider: 'Neon Postgres', configured: true, healthy: true, schemaReady };
+    const requiredTables = {
+      app_users: Boolean(schema?.users_ready),
+      workspaces: Boolean(schema?.workspaces_ready),
+      workspace_members: Boolean(schema?.memberships_ready),
+      app_sessions: Boolean(schema?.sessions_ready),
+      player_profiles: Boolean(schema?.players_ready),
+      watchlists: Boolean(schema?.watchlists_ready),
+      scouting_notes: Boolean(schema?.notes_ready),
+      scouting_reports: Boolean(schema?.reports_ready),
+      player_media: Boolean(schema?.media_ready),
+    };
+
+    const schemaReady = Object.values(requiredTables).every(Boolean);
+    return {
+      provider: 'Neon Postgres',
+      configured: true,
+      healthy: true,
+      schemaReady,
+      requiredTables,
+    };
   } catch (error) {
     console.error('WTS health database check failed', error);
-    return { provider: 'Neon Postgres', configured: true, healthy: false, schemaReady: false };
+    return {
+      provider: 'Neon Postgres',
+      configured: true,
+      healthy: false,
+      schemaReady: false,
+      requiredTables: {},
+    };
   }
 }
 
