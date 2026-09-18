@@ -1,5 +1,5 @@
 import { db, json, methodNotAllowed, serverError } from './_lib/db.js';
-import { requireAuth } from './_lib/auth.js';
+import { requireAuth, assertSameOrigin } from './_lib/auth.js';
 
 async function bodyOf(request) {
   if (request.body && typeof request.body === 'object') return request.body;
@@ -9,6 +9,7 @@ async function bodyOf(request) {
 export default async function handler(request, response) {
   try {
     const auth = await requireAuth(request);
+    assertSameOrigin(request);
     const workspaceId = auth.workspace.id;
     const sql = db();
 
