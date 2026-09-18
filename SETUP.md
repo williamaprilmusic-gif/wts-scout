@@ -3,7 +3,7 @@
 WTS Scout uses this production architecture:
 
 ```text
-GitHub → Vercel → Neon Postgres → Vercel Blob → Vercel AI Gateway
+GitHub → Vercel → Neon Postgres → Vercel Blob → AI Provider
 ```
 
 ## 1. Database — Neon Postgres
@@ -34,7 +34,7 @@ The Neon database is server-side only. The browser never receives `DATABASE_URL`
 
 ## 2. Authentication — WTS Scout application identity
 
-WTS Scout now uses database-backed application authentication rather than a browser-generated workspace ID.
+WTS Scout uses database-backed application authentication rather than a browser-generated workspace ID.
 
 The current system provides:
 
@@ -47,7 +47,7 @@ The current system provides:
 - Workspace membership records for authorization
 - Server-derived workspace context for player, shortlist, notes, reports, AI and media APIs
 
-No external hosted authentication project is required; WTS Scout owns its application authentication layer.
+No external hosted authentication project is required.
 
 Before a large public launch, add email verification, password reset/recovery, login abuse/rate limiting, audit logs and a workspace invitation flow.
 
@@ -57,27 +57,24 @@ Create a **private** Vercel Blob store and connect it to the `wts-scout` project
 
 The upload endpoint validates the authenticated user, workspace membership and player ownership before it issues a Blob upload token. Completed media metadata is stored in Neon.
 
-For current Vercel Blob OIDC stores, connect the store to the project; Vercel supplies short-lived OIDC credentials and the connected store ID (`BLOB_STORE_ID`). Older/static-token stores can use `BLOB_READ_WRITE_TOKEN` instead. Vercel documents Blob OIDC as the default for new stores.
+For current Vercel Blob OIDC stores, connect the store to the project; Vercel supplies short-lived OIDC credentials and the connected store ID (`BLOB_STORE_ID`). Older/static-token stores can use `BLOB_READ_WRITE_TOKEN` instead.
 
-## 4. AI — Vercel AI Gateway
+## 4. AI — Free Gemini development path + optional Vercel AI Gateway
 
-Configure Vercel AI Gateway for the project.
+WTS Scout supports two AI providers behind the same `/api/scout` endpoint:
 
-On Vercel deployments, AI Gateway can authenticate through the project's OIDC token, so a persistent gateway key is not required for production. A key remains supported for local development or environments without OIDC.
+- **Gemini API** for a free development path. Set `GEMINI_API_KEY` and optionally `WTS_SCOUT_PROVIDER=gemini`.
+- **Vercel AI Gateway** for a managed multi-provider production path. Set `WTS_SCOUT_PROVIDER=gateway` and use `AI_GATEWAY_API_KEY` or Vercel OIDC where supported.
 
-Required variable when API-key authentication is used:
+Default behavior selects Gemini when `GEMINI_API_KEY` is present; otherwise it falls back to AI Gateway.
 
-```text
-AI_GATEWAY_API_KEY
-```
-
-Optional model override:
+Recommended free-development model:
 
 ```text
-WTS_SCOUT_MODEL=openai/gpt-5.4
+WTS_SCOUT_GEMINI_MODEL=gemini-2.5-flash-lite
 ```
 
-The AI route requires an authenticated workspace and verifies that the player belongs to that workspace before generating a report. The server prompt is evidence-led and explicitly prohibits inventing player statistics or history.
+The Gemini route uses structured JSON output and validates the result again with Zod before returning it.
 
 ## 5. Environment variables
 
@@ -87,8 +84,11 @@ Keep these values server-side in Vercel Project Settings:
 DATABASE_URL
 BLOB_STORE_ID (OIDC Blob stores)
 BLOB_READ_WRITE_TOKEN (legacy Blob stores only)
-AI_GATEWAY_API_KEY (optional on Vercel when OIDC is available)
-WTS_SCOUT_MODEL
+GEMINI_API_KEY (free AI development path)
+WTS_SCOUT_PROVIDER (gemini or gateway)
+WTS_SCOUT_GEMINI_MODEL
+AI_GATEWAY_API_KEY (optional when using gateway)
+WTS_SCOUT_MODEL (optional gateway model override)
 ```
 
 Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
@@ -97,7 +97,7 @@ Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
 
 The Git repository is connected to Vercel and `main` is configured to allow Git deployments.
 
-Manual CLI equivalents documented by Vercel are:
+Manual CLI equivalents:
 
 ```bash
 vercel deploy
@@ -112,7 +112,7 @@ Use:
 /api/health
 ```
 
-The endpoint checks database connectivity and reports whether Blob and AI configuration is present. It does not expose secret values.
+The endpoint checks database connectivity and reports whether Blob and the selected AI provider are configured. It does not expose secret values.
 
 ## 8. Production checklist
 
@@ -121,7 +121,7 @@ The endpoint checks database connectivity and reports whether Blob and AI config
 - `DATABASE_URL` configured in Production and Preview
 - Private Vercel Blob store connected
 - Blob token/OIDC configured
-- AI Gateway configured
+- Gemini free AI path tested OR AI Gateway configured
 - Real authentication enabled
 - Workspace authorization enabled on all protected APIs
 - GitHub CI production build passing
