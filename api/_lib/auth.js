@@ -52,11 +52,32 @@ function hashToken(token) {
 
 function parseCookies(request) {
   const cookie = request.headers?.get?.('cookie') || request.headers?.cookie || '';
-  return Object.fromEntries(cookie.split(';').map(part => {
+  const values = {};
+  for (const part of cookie.split(';')) {
     const index = part.indexOf('=');
-    if (index === -1) return ['', ''];
-    return [part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())];
-  }).filter(([key]) => key));
+    if (index === -1) continue;
+    const key = part.slice(0, index).trim();
+    if (!key) continue;
+    try { values[key] = decodeURIComponent(part.slice(index + 1).trim()); } catch { values[key] = ''; }
+  }
+  return values;
+}
+
+export function assertSameOrigin(request) {
+  const method = String(request.method || 'GET').toUpperCase();
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
+  if (request.headers?.get?.('sec-fetch-site') === 'cross-site') {
+    throw Object.assign(new Error('Cross-site request rejected.'), { status: 403 });
+  }
+  const origin = request.headers?.get?.('origin');
+  if (!origin) return;
+  let requestOrigin;
+  try { requestOrigin = new URL(request.url).origin; } catch {
+    throw Object.assign(new Error('Invalid request origin.'), { status: 403 });
+  }
+  if (origin !== requestOrigin) {
+    throw Object.assign(new Error('Cross-origin request rejected.'), { status: 403 });
+  }
 }
 
 function cookieString(token, maxAge) {
