@@ -9,8 +9,59 @@ export const demoPlayers = [
   { id: 'demo-6', full_name: 'Nia Daniels', age: 17, position: 'LB', secondary_position: 'LWB', preferred_foot: 'Left', nationality: 'Ghana', city: 'Accra', current_club: 'Accra Elite', status: 'Watchlist', fit_score: 84, minutes: 1432, goals: 2, assists: 11, strengths: ['Recovery', 'Crossing', 'Tempo'], bio: 'Modern full-back with repeat running capacity and a progressive crossing profile.', avatar_url: '' },
 ];
 
-export const wtsConfigured = true;
+const requestedMode = String(import.meta.env.VITE_WTS_SCOUT_MODE || '').trim().toLowerCase();
+const deploymentEnv = String(
+  import.meta.env.VITE_WTS_VERCEL_ENV || (import.meta.env.DEV ? 'development' : 'production')
+).trim().toLowerCase();
+
+export const wtsMode =
+  requestedMode === 'preview' && deploymentEnv === 'preview' ? 'preview' :
+  requestedMode === 'demo' && import.meta.env.DEV ? 'demo' :
+  'production';
+
+export const isPreviewMode = wtsMode !== 'production';
+export const wtsConfigured = !isPreviewMode;
+
+const PREVIEW_STORAGE_PREFIX = 'wts_scout_preview_v1';
 const authListeners = new Set();
+
+function previewStorageKey(name) {
+  return `${PREVIEW_STORAGE_PREFIX}:${name}`;
+}
+
+function readPreviewStorage(name, fallback) {
+  try {
+    const raw = window.localStorage.getItem(previewStorageKey(name));
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writePreviewStorage(name, value) {
+  try {
+    window.localStorage.setItem(previewStorageKey(name), JSON.stringify(value));
+  } catch {
+    // Preview mode remains usable even when browser storage is unavailable.
+  }
+}
+
+function makePreviewId(prefix) {
+  const id = globalThis.crypto?.randomUUID?.();
+  return id ? `${prefix}-${id}` : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function cloneDemoPlayers() {
+  return demoPlayers.map(player => ({ ...player, strengths: [...(player.strengths || [])] }));
+}
+
+function getPreviewPlayers() {
+  return readPreviewStorage('players', null) ?? cloneDemoPlayers();
+}
+
+function getPreviewWatchlist() {
+  return readPreviewStorage('watchlist', null) ?? ['demo-1', 'demo-3'];
+}
 
 function normalizeSession(raw) {
   if (!raw?.user) return null;
@@ -46,6 +97,7 @@ async function api(path, options = {}) {
 }
 
 export async function getSession() {
+  if (isPreviewMode) return null;
   try {
     const result = await api('/api/auth');
     return normalizeSession(result.session);
@@ -61,6 +113,11 @@ export function subscribeToAuth(callback) {
 }
 
 export async function signIn(email, password) {
+  if (isPreviewMode) {
+    const result = { session: { user: { id: 'preview-user', full_name: 'Preview Scout', role: 'scout' } } };
+    notifyAuth(result);
+    return { data: result, error: null };
+  }
   try {
     const result = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signin', email, password }) });
     notifyAuth(result);
@@ -71,6 +128,11 @@ export async function signIn(email, password) {
 }
 
 export async function signUp(email, password, name, role = 'scout') {
+  if (isPreviewMode) {
+    const result = { session: { user: { id: 'preview-user', full_name: name || 'Preview Scout', role } } };
+    notifyAuth(result);
+    return { data: result, error: null };
+  }
   try {
     const result = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signup', email, password, name, role }) });
     notifyAuth(result);
@@ -81,6 +143,10 @@ export async function signUp(email, password, name, role = 'scout') {
 }
 
 export async function signOut() {
+  if (isPreviewMode) {
+    notifyAuth(null);
+    return { error: null };
+  }
   try {
     await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'signout' }) });
     notifyAuth(null);
@@ -91,38 +157,42 @@ export async function signOut() {
 }
 
 export async function loadPlayers() {
+  if (isPreviewMode) return getPreviewPlayers();
   const result = await api('/api/players');
   return Array.isArray(result) ? result : result.players || [];
 }
 
 export async function createPlayer(payload, _userId) {
+  if (isPreviewMode) {
+    const row = {
+      id: makePreviewId('preview-player'),
+      full_name: payload.full_name,
+      age: payload.age ?? null,
+      position: payload.position || null,
+      secondary_position: payload.secondary_position || null,
+      preferred_foot: payload.preferred_foot || null,
+      nationality: payload.nationality || null,
+      city: payload.city || null,
+      current_club: payload.current_club || null,
+      league: payload.league || null,
+      status: payload.status || 'Emerging',
+      fit_score: payload.fit_score ?? null,
+      minutes: 0,
+      goals: 0,
+      assists: 0,
+      strengths: [...(payload.strengths || [])],
+      bio: payload.bio || '',
+      avatar_url: '',
+    };
+    writePreviewStorage('players', [row, ...getPreviewPlayers()]);
+    return row;
+  }
   const result = await api('/api/players', { method: 'POST', body: JSON.stringify(payload) });
   return result?.player || result;
 }
 
-export async function loadWatchlist(_userId) {
-  const result = await api('/api/watchlist');
-  return Array.isArray(result) ? result : result.playerIds || [];
-}
-
-export async function toggleWatchlist(_userId, playerId, active) {
-  if (String(playerId).startsWith('demo-')) return;
-  await api('/api/watchlist', { method: active ? 'DELETE' : 'POST', body: JSON.stringify({ playerId }) });
-}
-
-export async function createScoutingNote(_userId, playerId, note, stage = 'watching') {
-  if (String(playerId).startsWith('demo-')) return;
-  await api('/api/notes', { method: 'POST', body: JSON.stringify({ playerId, note, stage }) });
-}
-
-export async function loadNotes(_userId, playerId) {
-  if (String(playerId).startsWith('demo-')) return [];
-  const result = await api(`/api/notes?playerId=${encodeURIComponent(playerId)}`);
-  return Array.isArray(result) ? result : result.notes || [];
-}
-
-export async function uploadPlayerMedia(userId, playerId, file) {
-  if (String(playerId).startsWith('demo-')) throw new Error('Media uploads require a saved database player profile.');
+export async function export async function uploadPlayerMedia(userId, playerId, file) {
+  if (isPreviewMode) return URL.createObjectURL(file);
   if (!userId) throw new Error('Authentication is required for media uploads.');
   const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
   const result = await blobUpload(`players/${userId}/${playerId}/${Date.now()}-${safeName}`, file, {
@@ -135,7 +205,45 @@ export async function uploadPlayerMedia(userId, playerId, file) {
   return `/api/media?playerId=${encodeURIComponent(playerId)}&pathname=${encodeURIComponent(result.pathname)}`;
 }
 
+export async function generateScoutingReport(player, brief) {
+  if (isPreviewMode) {
+    const profileText = `${player.position || ''} ${(player.strengths || []).join(' ')} ${player.bio || ''} ${brief || ''}`.toLowerCase();
+    const strengthSeed = Math.min(20, (player.strengths || []).length * 4);
+    const contextSeed = profileText.includes('cam') || profileText.includes('creative') || profileText.includes('chance creation') ? 8 : 3;
+    const fitScore = Math.max(68, Math.min(94, 68 + strengthSeed + contextSeed));
+    return {
+      preview: true,
+      fitScore,
+      summary: `Preview assessment for ${player.full_name}: the profile contains the recorded football strengths and context supplied in this preview workspace.`,
+      strengths: (player.strengths || []).slice(0, 4),
+      developmentAreas: ['Verify competitive level against stronger opposition', 'Collect multiple live observations before recruitment action'],
+      tacticalFit: `Potential role fit should be tested against the stated brief: "${brief || 'No brief supplied.'}".`,
+      evidenceToVerify: ['Recent match footage', 'Verified competition and minutes', 'Current physical and availability context'],
+      nextObservation: 'Capture one full-match observation and compare the player against the same role profile at the next viewing.',
+    };
+  }
+  const response = await fetch('/api/scout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player, brief }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'AI report failed.');
+  return data;
+}
+
 export async function saveReport(_userId, playerId, report) {
-  if (String(playerId).startsWith('demo-')) return;
+  if (isPreviewMode) {
+    const reports = readPreviewStorage('reports', []);
+    writePreviewStorage('reports', [{
+      id: makePreviewId('preview-report'),
+      player_id: playerId,
+      title: report.title,
+      content: report.content,
+      fit_score: report.fitScore || null,
+      created_at: new Date().toISOString(),
+    }, ...reports]);
+    return;
+  }
   await api('/api/reports', { method: 'POST', body: JSON.stringify({ playerId, title: report.title, content: report.content, fitScore: report.fitScore || null }) });
 }
