@@ -21,8 +21,14 @@ function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(!wtsConfigured);
   const [page, setPage] = useState('dashboard');
-  const [players, setPlayers] = useState(() => { try { return JSON.parse(localStorage.getItem('wts_demo_players') || 'null') || demoPlayers; } catch { return demoPlayers; } });
-  const [watchlist, setWatchlist] = useState(() => { try { return JSON.parse(localStorage.getItem('wts_demo_watchlist') || 'null') || ['demo-1', 'demo-3']; } catch { return ['demo-1', 'demo-3']; } });
+  const [players, setPlayers] = useState(() => {
+    if (wtsConfigured) return [];
+    try { return JSON.parse(localStorage.getItem('wts_demo_players') || 'null') || demoPlayers; } catch { return demoPlayers; }
+  });
+  const [watchlist, setWatchlist] = useState(() => {
+    if (wtsConfigured) return [];
+    try { return JSON.parse(localStorage.getItem('wts_demo_watchlist') || 'null') || ['demo-1', 'demo-3']; } catch { return ['demo-1', 'demo-3']; }
+  });
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState('');
   const [position, setPosition] = useState('All positions');
