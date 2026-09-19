@@ -82,6 +82,29 @@ WTS_SCOUT_MODEL
 
 Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
 
+## Preview / Demo mode
+
+Preview is explicitly isolated from production. The application defaults to **production mode** unless the deployment is a Vercel Preview build with both of these client-visible variables:
+
+```text
+VITE_WTS_SCOUT_MODE=preview
+VITE_WTS_VERCEL_ENV=preview
+```
+
+Configure those variables for the **Preview** environment only. Do not set them in Production.
+
+Preview mode:
+- Uses the bundled sample player profiles plus browser-local preview data.
+- Stores preview players, shortlists, notes and reports under an isolated `wts_scout_preview_v1:` local-storage namespace.
+- Never calls the production player, shortlist, notes, reports, media or AI API paths for preview data.
+- Generates scouting reports locally as clearly marked simulated preview output.
+- Uses temporary browser object URLs for media selection instead of Vercel Blob.
+- Has no dependency on Neon, Blob or AI Gateway.
+
+For local development, `VITE_WTS_SCOUT_MODE=demo` enables the same isolated data adapter when running Vite in development mode.
+
+The fail-safe rule is important: a non-Preview deployment never enters Preview mode, even if `VITE_WTS_SCOUT_MODE=preview` is accidentally present without `VITE_WTS_VERCEL_ENV=preview`.
+
 ## 6. Deploy
 
 The Git repository is connected to Vercel and `main` is configured to allow Git deployments.
