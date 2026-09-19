@@ -191,7 +191,7 @@ export async function createPlayer(payload, _userId) {
   return result?.player || result;
 }
 
-export async function export async function uploadPlayerMedia(userId, playerId, file) {
+export async function uploadPlayerMedia(userId, playerId, file) {
   if (isPreviewMode) return URL.createObjectURL(file);
   if (!userId) throw new Error('Authentication is required for media uploads.');
   const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
