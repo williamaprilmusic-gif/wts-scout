@@ -8,7 +8,7 @@ for (const file of ['README.md','SETUP.md','package.json','db/schema.sql']) {
   const content = await readFile(file, 'utf8');
   if (/supabase/i.test(content)) throw new Error(`Supabase reference found in ${file}; WTS Scout must use the Vercel-first stack.`);
 }
-const requiredApiRoutes = ['api/auth.js','api/health.js','api/players.js','api/watchlist.js','api/notes.js','api/reports.js','api/scout.js','api/upload.js'];
+const requiredApiRoutes = ['api/auth.js','api/health.js','api/players.js','api/watchlist.js','api/notes.js','api/reports.js','api/scout.js','api/upload.js','api/media.js'];
 for (const file of requiredApiRoutes) {
   try { await readFile(file, 'utf8'); } catch { throw new Error(`Missing required API route: ${file}`); }
 }
