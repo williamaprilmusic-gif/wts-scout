@@ -51,6 +51,8 @@ Create a **private** Vercel Blob store and connect it to the `wts-scout` project
 
 The upload endpoint validates the authenticated user, workspace membership and player ownership before it issues a Blob upload token. Completed media metadata is stored in Neon.
 
+Private media is never opened directly from the Blob URL. Authenticated reads go through `/api/media`, which verifies the signed-in user's workspace and player ownership before streaming the private Blob object.
+
 For current Vercel Blob OIDC stores, connect the store to the project; Vercel supplies short-lived OIDC credentials and the connected store ID (`BLOB_STORE_ID`). Older/static-token stores can use `BLOB_READ_WRITE_TOKEN` instead.
 
 ## 4. AI — Vercel AI Gateway
