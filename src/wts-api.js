@@ -10,12 +10,9 @@ export const demoPlayers = [
 ];
 
 const requestedMode = String(import.meta.env.VITE_WTS_SCOUT_MODE || '').trim().toLowerCase();
-const deploymentEnv = String(
-  import.meta.env.VITE_WTS_VERCEL_ENV || (import.meta.env.DEV ? 'development' : 'production')
-).trim().toLowerCase();
 
 export const wtsMode =
-  requestedMode === 'preview' && deploymentEnv === 'preview' ? 'preview' :
+  requestedMode === 'preview' ? 'preview' :
   requestedMode === 'demo' && import.meta.env.DEV ? 'demo' :
   'production';
 
