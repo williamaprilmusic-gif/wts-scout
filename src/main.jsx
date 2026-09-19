@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Activity, ArrowUpRight, Bell, Bookmark, Building2, CheckCircle2, ChevronDown, ChevronRight, FileText, GraduationCap, LayoutDashboard, LogIn, LogOut, Menu, Plus, Radar, Search, Settings2, ShieldCheck, Sparkles, Target, Upload, Users, X, Zap } from 'lucide-react';
 import './styles.css';
-import { createPlayer, createScoutingNote, demoPlayers, generateScoutingReport, getSession, loadNotes, loadPlayers, loadWatchlist, saveReport, signIn, signOut, signUp, wtsConfigured, subscribeToAuth, toggleWatchlist, uploadPlayerMedia } from './wts-api.js';
+import { createPlayer, createScoutingNote, generateScoutingReport, getSession, loadNotes, loadPlayers, loadWatchlist, saveReport, signIn, signOut, signUp, wtsConfigured, subscribeToAuth, toggleWatchlist, uploadPlayerMedia } from './wts-api.js';
 
 const nav = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -21,14 +21,8 @@ function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(!wtsConfigured);
   const [page, setPage] = useState('dashboard');
-  const [players, setPlayers] = useState(() => {
-    if (wtsConfigured) return [];
-    try { return JSON.parse(localStorage.getItem('wts_demo_players') || 'null') || demoPlayers; } catch { return demoPlayers; }
-  });
-  const [watchlist, setWatchlist] = useState(() => {
-    if (wtsConfigured) return [];
-    try { return JSON.parse(localStorage.getItem('wts_demo_watchlist') || 'null') || ['demo-1', 'demo-3']; } catch { return ['demo-1', 'demo-3']; }
-  });
+  const [players, setPlayers] = useState([]);
+  const [watchlist, setWatchlist] = useState([]);
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState('');
   const [position, setPosition] = useState('All positions');
@@ -39,12 +33,21 @@ function App() {
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    if (!wtsConfigured) return undefined;
-    getSession().then(s => { setSession(s); setReady(true); });
+    if (!wtsConfigured) {
+      Promise.all([loadPlayers(), loadWatchlist(null)])
+        .then(([rows, ids]) => { setPlayers(rows); setWatchlist(ids); setReady(true); })
+        .catch(error => { setReady(true); showToast(error.message || 'Could not load preview data.'); });
+      return undefined;
+    }
+    getSession().then(s => { setSession(s); setReady(true); }).catch(() => setReady(true));
     return subscribeToAuth(s => setSession(s));
   }, []);
-  useEffect(() => { if (!wtsConfigured) { localStorage.setItem('wts_demo_players', JSON.stringify(players)); localStorage.setItem('wts_demo_watchlist', JSON.stringify(watchlist)); } }, [players, watchlist]);
-  useEffect(() => { if (!session?.user?.id) return; Promise.all([loadPlayers(), loadWatchlist(session.user.id)]).then(([rows, ids]) => { setPlayers(rows); setWatchlist(ids); }).catch(error => showToast(error.message)); }, [session]);
+  useEffect(() => {
+    if (!session?.user?.id || !wtsConfigured) return;
+    Promise.all([loadPlayers(), loadWatchlist(session.user.id)])
+      .then(([rows, ids]) => { setPlayers(rows); setWatchlist(ids); })
+      .catch(error => showToast(error.message));
+  }, [session]);
 
   function showToast(message) { setToast(message); window.setTimeout(() => setToast(''), 3500); }
   async function handleAuth(values) {
@@ -58,7 +61,7 @@ function App() {
     setBusy(true);
     try {
       const payload = { full_name: form.name, position: form.position, secondary_position: form.secondary || null, preferred_foot: form.foot, nationality: form.nationality, city: form.city, current_club: form.club, league: form.league, status: 'Emerging', bio: form.bio, strengths: form.strengths.split(',').map(x => x.trim()).filter(Boolean), age: Number(form.age) || null, fit_score: null };
-      const row = await createPlayer(payload, session?.user?.id || 'demo-user'); setPlayers(p => [row, ...p]); setSelected(row); setModal(null); showToast('Player profile created.');
+      const row = await createPlayer(payload, session?.user?.id || null); setPlayers(p => [row, ...p]); setSelected(row); setModal(null); showToast('Player profile created.');
     } catch (error) { showToast(error.message || 'Could not create player.'); } finally { setBusy(false); }
   }
   async function handleShortlist(player) {
