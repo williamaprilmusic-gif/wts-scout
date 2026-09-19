@@ -91,13 +91,8 @@ export async function signOut() {
 }
 
 export async function loadPlayers() {
-  try {
-    const result = await api('/api/players');
-    return Array.isArray(result) ? result : result.players || [];
-  } catch (error) {
-    if (error?.status === 401 || error?.status === 403) throw error;
-    return demoPlayers;
-  }
+  const result = await api('/api/players');
+  return Array.isArray(result) ? result : result.players || [];
 }
 
 export async function createPlayer(payload, _userId) {
@@ -106,13 +101,8 @@ export async function createPlayer(payload, _userId) {
 }
 
 export async function loadWatchlist(_userId) {
-  try {
-    const result = await api('/api/watchlist');
-    return Array.isArray(result) ? result : result.playerIds || [];
-  } catch (error) {
-    if (error?.status === 401 || error?.status === 403) throw error;
-    return ['demo-1', 'demo-3'];
-  }
+  const result = await api('/api/watchlist');
+  return Array.isArray(result) ? result : result.playerIds || [];
 }
 
 export async function toggleWatchlist(_userId, playerId, active) {
@@ -127,12 +117,8 @@ export async function createScoutingNote(_userId, playerId, note, stage = 'watch
 
 export async function loadNotes(_userId, playerId) {
   if (String(playerId).startsWith('demo-')) return [];
-  try {
-    const result = await api(`/api/notes?playerId=${encodeURIComponent(playerId)}`);
-    return Array.isArray(result) ? result : result.notes || [];
-  } catch {
-    return [];
-  }
+  const result = await api(`/api/notes?playerId=${encodeURIComponent(playerId)}`);
+  return Array.isArray(result) ? result : result.notes || [];
 }
 
 export async function uploadPlayerMedia(userId, playerId, file) {
