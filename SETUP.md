@@ -84,14 +84,9 @@ Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
 
 ## Preview / Demo mode
 
-Preview is explicitly isolated from production. The application defaults to **production mode** unless the deployment is a Vercel Preview build with both of these client-visible variables:
+Preview is explicitly isolated from production. The Vite configuration reads Vercel's `VERCEL_ENV` during the build and automatically selects Preview mode for Vercel Preview deployments. Production is hard-forced to production mode.
 
-```text
-VITE_WTS_SCOUT_MODE=preview
-VITE_WTS_VERCEL_ENV=preview
-```
-
-Configure those variables for the **Preview** environment only. Do not set them in Production.
+For local development, `VITE_WTS_SCOUT_MODE=demo` enables the same isolated adapter. Do not set a Preview mode override in Production.
 
 Preview mode:
 - Uses the bundled sample player profiles plus browser-local preview data.
@@ -101,9 +96,7 @@ Preview mode:
 - Uses temporary browser object URLs for media selection instead of Vercel Blob.
 - Has no dependency on Neon, Blob or AI Gateway.
 
-For local development, `VITE_WTS_SCOUT_MODE=demo` enables the same isolated data adapter when running Vite in development mode.
-
-The fail-safe rule is important: a non-Preview deployment never enters Preview mode, even if `VITE_WTS_SCOUT_MODE=preview` is accidentally present without `VITE_WTS_VERCEL_ENV=preview`.
+The fail-safe rule is important: a Vercel Production build is hard-forced to production mode, so bundled preview data cannot become the production data source through a Preview flag alone.
 
 ## 6. Deploy
 
