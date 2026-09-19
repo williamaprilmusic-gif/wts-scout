@@ -20,6 +20,13 @@ for (const file of ['src/main.jsx','src/wts-api.js']) {
   const content = await readFile(file, 'utf8');
   if (/supabase/i.test(content)) throw new Error(`Supabase reference found in ${file}; use the WTS API client and Vercel-first stack.`);
 }
+const clientApi = await readFile('src/wts-api.js', 'utf8');
+for (const marker of ["VITE_WTS_SCOUT_MODE", "PREVIEW_STORAGE_PREFIX = 'wts_scout_preview_v1'", "requestedMode === 'preview'", "requestedMode === 'demo' && import.meta.env.DEV"]) {
+  if (!clientApi.includes(marker)) throw new Error(`Preview isolation marker missing from src/wts-api.js: ${marker}`);
+}
+if (!clientApi.includes("const wtsConfigured = !isPreviewMode".replace('const ', 'export const '))) {
+  throw new Error('Production mode must remain the default client configuration.');
+}
 const packageJson = JSON.parse(await readFile('package.json','utf8'));
 const dependencies = {...(packageJson.dependencies ?? {}), ...(packageJson.devDependencies ?? {})};
 for (const dependency of ['@neondatabase/serverless','@vercel/blob','zod']) {
