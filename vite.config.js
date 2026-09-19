@@ -1,19 +1,17 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+export default defineConfig(() => {
   const deploymentEnv = String(
     process.env.VERCEL_ENV ||
-    env.VITE_WTS_VERCEL_ENV ||
-    (mode === 'development' ? 'development' : 'production')
+    process.env.VITE_WTS_VERCEL_ENV ||
+    'production'
   ).trim().toLowerCase();
 
-  const requestedMode = String(env.VITE_WTS_SCOUT_MODE || '').trim().toLowerCase();
+  const requestedMode = String(process.env.VITE_WTS_SCOUT_MODE || '').trim().toLowerCase();
 
-  // Production is a hard fail-safe. Vercel Preview builds default to isolated
-  // preview mode; local Vite development can opt into the same adapter with
-  // VITE_WTS_SCOUT_MODE=demo.
+  // Production is a hard fail-safe. Preview deployments automatically use
+  // the isolated preview adapter. Local development can opt into demo mode.
   const scoutMode =
     deploymentEnv === 'production' ? 'production' :
     deploymentEnv === 'preview' ? (requestedMode === 'production' ? 'production' : 'preview') :
