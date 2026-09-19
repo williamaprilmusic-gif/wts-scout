@@ -229,7 +229,7 @@ export async function generateScoutingReport(player, brief) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'AI report failed.');
-  return data;
+  return data.report ?? data;
 }
 
 export async function saveReport(_userId, playerId, report) {
