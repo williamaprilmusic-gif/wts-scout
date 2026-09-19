@@ -139,12 +139,14 @@ export async function uploadPlayerMedia(userId, playerId, file) {
   if (String(playerId).startsWith('demo-')) throw new Error('Media uploads require a saved database player profile.');
   if (!userId) throw new Error('Authentication is required for media uploads.');
   const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
-  return blobUpload(`players/${userId}/${playerId}/${Date.now()}-${safeName}`, file, {
+  const result = await blobUpload(`players/${userId}/${playerId}/${Date.now()}-${safeName}`, file, {
     access: 'private',
     handleUploadUrl: '/api/upload',
     clientPayload: JSON.stringify({ playerId }),
     multipart: file.size > 4 * 1024 * 1024,
   });
+  if (!result?.pathname) throw new Error('Blob upload completed without a pathname.');
+  return `/api/media?playerId=${encodeURIComponent(playerId)}&pathname=${encodeURIComponent(result.pathname)}`;
 }
 
 export async function saveReport(_userId, playerId, report) {
