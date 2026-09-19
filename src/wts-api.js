@@ -191,6 +191,45 @@ export async function createPlayer(payload, _userId) {
   return result?.player || result;
 }
 
+export async function loadWatchlist(_userId) {
+  if (isPreviewMode) return getPreviewWatchlist();
+  const result = await api('/api/watchlist');
+  return Array.isArray(result) ? result : result.playerIds || [];
+}
+
+export async function toggleWatchlist(_userId, playerId, active) {
+  if (isPreviewMode) {
+    const watchlist = getPreviewWatchlist();
+    const next = active ? watchlist.filter(id => id !== playerId) : [...new Set([...watchlist, playerId])];
+    writePreviewStorage('watchlist', next);
+    return;
+  }
+  await api('/api/watchlist', { method: active ? 'DELETE' : 'POST', body: JSON.stringify({ playerId }) });
+}
+
+export async function createScoutingNote(_userId, playerId, note, stage = 'watching') {
+  if (isPreviewMode) {
+    const notes = readPreviewStorage('notes', []);
+    writePreviewStorage('notes', [{
+      id: makePreviewId('preview-note'),
+      player_id: playerId,
+      note,
+      stage,
+      created_at: new Date().toISOString(),
+    }, ...notes]);
+    return;
+  }
+  await api('/api/notes', { method: 'POST', body: JSON.stringify({ playerId, note, stage }) });
+}
+
+export async function loadNotes(_userId, playerId) {
+  if (isPreviewMode) {
+    return readPreviewStorage('notes', []).filter(note => note.player_id === playerId);
+  }
+  const result = await api(`/api/notes?playerId=${encodeURIComponent(playerId)}`);
+  return Array.isArray(result) ? result : result.notes || [];
+}
+
 export async function uploadPlayerMedia(userId, playerId, file) {
   if (isPreviewMode) return URL.createObjectURL(file);
   if (!userId) throw new Error('Authentication is required for media uploads.');
