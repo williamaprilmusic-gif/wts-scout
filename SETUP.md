@@ -82,6 +82,21 @@ WTS_SCOUT_MODEL
 
 Do not place database, Blob or AI secrets in Vite `VITE_*` variables.
 
+## Neon production connection
+
+WTS Scout uses Neon Postgres through the Vercel Marketplace. The repository already contains the Neon serverless driver, production database helper and `db/schema.sql`; the remaining step is connecting the Vercel project to a Neon resource so Vercel injects `DATABASE_URL`.
+
+From an authenticated Vercel CLI session in the WTS Scout project directory:
+
+```bash
+vercel integration add neon --name wts-scout-db -e production -e preview
+```
+
+The current Neon/Vercel flow provisions the resource and connects environment variables such as `DATABASE_URL` to the selected Vercel environments. Vercel/Neon also support isolated Neon branches for Preview deployments. citeturn646448search1turn646448search2
+
+After the connection is created, apply the complete `db/schema.sql` in the connected Neon database, then create a fresh Vercel deployment. The WTS health endpoint should change from database `configured=false / schemaReady=false` to `configured=true / healthy=true / schemaReady=true` once the connection and schema are correct.
+
+
 ## Preview / Demo mode
 
 Preview is isolated from production. Configure the Preview environment in Vercel with:
