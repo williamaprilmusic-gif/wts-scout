@@ -8,6 +8,7 @@ function validUuid(value) {
 
 export default async function handler(request, response) {
   if (request.method !== 'GET') return response.status(405).json({ error: 'Method not allowed.' });
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
 
   try {
     const auth = await requireAuth(request);
