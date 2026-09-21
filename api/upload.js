@@ -15,7 +15,9 @@ export default async function handler(request, response) {
   try {
     if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed.' });
     assertSameOrigin(request);
-    if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
+    // Blob client uploads require the Blob read/write token. Do not treat the
+    // Vercel OIDC token used by AI Gateway as a Blob credential.
+    if (!process.env.BLOB_READ_WRITE_TOKEN) return response.status(503).json({ error: 'Vercel Blob is not configured.' });
 
     const auth = await requireAuth(request, { workspaceRoles: ['owner', 'scout', 'analyst'] });
     const body = request.body && typeof request.body === 'object' ? request.body : await request.json();
