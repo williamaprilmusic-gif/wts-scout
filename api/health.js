@@ -41,14 +41,18 @@ async function checkDatabase() {
 export default async function handler(request, response) {
   if (request.method !== 'GET') return sendJson(response, { error: 'Method not allowed.' }, 405);
   const database = await checkDatabase();
-  const blobTokenConfigured = configured('BLOB_READ_WRITE_TOKEN') || configured('VERCEL_OIDC_TOKEN');
-  const blobStoreConfigured = configured('BLOB_STORE_ID') || configured('BLOB_READ_WRITE_TOKEN');
+
+  // Vercel Blob client/server operations require the Blob read/write token.
+  // VERCEL_OIDC_TOKEN is used for AI Gateway auth, not as proof that Blob is usable.
+  const blobTokenConfigured = configured('BLOB_READ_WRITE_TOKEN');
+  const blobStoreConfigured = configured('BLOB_STORE_ID') || blobTokenConfigured;
   const blobConfigured = blobTokenConfigured && blobStoreConfigured;
   const blob = {
     provider: 'Vercel Blob', configured: blobConfigured, healthy: blobConfigured,
-    auth: configured('BLOB_READ_WRITE_TOKEN') ? 'api-key' : configured('VERCEL_OIDC_TOKEN') ? 'oidc' : 'missing',
+    auth: blobTokenConfigured ? 'api-key' : 'missing',
     store: blobStoreConfigured ? 'connected' : 'missing',
   };
+
   const aiStatus = getScoutingProviderStatus();
   const ai = {
     provider: 'Vercel AI Gateway', model: aiStatus.model, configured: aiStatus.configured, healthy: aiStatus.configured,
