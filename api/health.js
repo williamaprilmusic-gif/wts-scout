@@ -1,18 +1,35 @@
 import { db, isDbConfigured } from './_lib/db.js';
 import { getScoutingProviderStatus } from './_lib/ai.js';
 
+const HEALTH_TIMEOUT_MS = 5000;
+
 function configured(name) { return Boolean(process.env[name]); }
 function sendJson(response, data, status = 200) {
   response.setHeader('Cache-Control', 'no-store, private');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
   return response.status(status).json(data);
+}
+
+async function withTimeout(promise, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} health check timed out`)), HEALTH_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function checkDatabase() {
   if (!isDbConfigured()) return { provider: 'Neon Postgres', configured: false, healthy: false, schemaReady: false, requiredTables: {} };
   try {
     const sql = db();
-    await sql`select 1 as ok`;
-    const [schema] = await sql`
+    await withTimeout(sql`select 1 as ok`, 'Database connectivity');
+    const [schema] = await withTimeout(sql`
       select
         to_regclass('public.app_users') is not null as users_ready,
         to_regclass('public.workspaces') is not null as workspaces_ready,
@@ -23,7 +40,7 @@ async function checkDatabase() {
         to_regclass('public.scouting_notes') is not null as notes_ready,
         to_regclass('public.scouting_reports') is not null as reports_ready,
         to_regclass('public.player_media') is not null as media_ready
-    `;
+    `, 'Database schema');
     const requiredTables = {
       app_users: Boolean(schema?.users_ready), workspaces: Boolean(schema?.workspaces_ready),
       workspace_members: Boolean(schema?.memberships_ready), app_sessions: Boolean(schema?.sessions_ready),
@@ -34,7 +51,7 @@ async function checkDatabase() {
     return { provider: 'Neon Postgres', configured: true, healthy: true, schemaReady: Object.values(requiredTables).every(Boolean), requiredTables };
   } catch (error) {
     console.error('WTS health database check failed', error);
-    return { provider: 'Neon Postgres', configured: true, healthy: false, schemaReady: false, requiredTables: {} };
+    return { provider: 'Neon Postgres', configured: true, healthy: false, schemaReady: false, requiredTables: {}, error: error?.message?.includes('timed out') ? 'timeout' : 'unavailable' };
   }
 }
 
