@@ -38,15 +38,13 @@ async function checkDatabase() {
         to_regclass('public.player_profiles') is not null as players_ready,
         to_regclass('public.watchlists') is not null as watchlists_ready,
         to_regclass('public.scouting_notes') is not null as notes_ready,
-        to_regclass('public.scouting_reports') is not null as reports_ready,
-        to_regclass('public.player_media') is not null as media_ready
+        to_regclass('public.scouting_reports') is not null as reports_ready
     `, 'Database schema');
     const requiredTables = {
       app_users: Boolean(schema?.users_ready), workspaces: Boolean(schema?.workspaces_ready),
       workspace_members: Boolean(schema?.memberships_ready), app_sessions: Boolean(schema?.sessions_ready),
       player_profiles: Boolean(schema?.players_ready), watchlists: Boolean(schema?.watchlists_ready),
       scouting_notes: Boolean(schema?.notes_ready), scouting_reports: Boolean(schema?.reports_ready),
-      player_media: Boolean(schema?.media_ready),
     };
     return { provider: 'Neon Postgres', configured: true, healthy: true, schemaReady: Object.values(requiredTables).every(Boolean), requiredTables };
   } catch (error) {
