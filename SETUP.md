@@ -49,9 +49,9 @@ Before a large public launch, add email verification, password reset/recovery, l
 
 Create a **private** Vercel Blob store and connect it to the `wts-scout` project.
 
-The upload endpoint validates the authenticated user, workspace membership and player ownership before it issues a Blob upload token. Completed media metadata is stored in Neon.
+Vercel Blob is reserved for private player profile pictures. Player scouting videos are external YouTube or TikTok links and are not uploaded or stored by WTS Scout.
 
-Private media is never opened directly from the Blob URL. Authenticated reads go through `/api/media`, which verifies the signed-in user's workspace and player ownership before streaming the private Blob object.
+Profile-picture uploads must be authenticated and scoped to the active workspace and player. Do not expose arbitrary Blob path access.
 
 For current Vercel Blob OIDC stores, connect the store to the project; Vercel supplies short-lived OIDC credentials and the connected store ID (`BLOB_STORE_ID`). Older/static-token stores can use `BLOB_READ_WRITE_TOKEN` instead.
 
@@ -110,9 +110,8 @@ Do **not** set this variable in the Production environment. The application trea
 Preview mode:
 - Uses the bundled sample player profiles plus browser-local preview data.
 - Stores preview players, shortlists, notes and reports under the isolated `wts_scout_preview_v1:` local-storage namespace.
-- Never calls the production player, shortlist, notes, reports, media or AI API paths for preview data.
+- Never calls the production player, shortlist, notes, reports, profile-picture or AI API paths for preview data.
 - Generates scouting reports locally as clearly marked simulated preview output.
-- Uses temporary browser object URLs for media selection instead of Vercel Blob.
 - Has no dependency on Neon, Blob or AI Gateway.
 
 For local development, set `VITE_WTS_SCOUT_MODE=demo` before running Vite to use the same isolated local adapter.
@@ -153,4 +152,4 @@ The endpoint checks database connectivity/schema readiness and reports whether B
 - Workspace authorization enabled on all protected APIs
 - GitHub CI production build passing
 - Current `main` commit deployed to Vercel Production
-- Preview auth, player creation, shortlist, notes, reports and media uploads tested before public launch
+- Preview auth, player creation, shortlist, notes, reports and profile-picture handling tested before public launch
