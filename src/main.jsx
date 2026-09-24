@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, ArrowUpRight, Bell, Bookmark, Building2, CheckCircle2, ChevronDown, ChevronRight, FileText, GraduationCap, LayoutDashboard, LogIn, LogOut, Menu, Plus, Radar, Search, Settings2, ShieldCheck, Sparkles, Target, Users, X, Zap } from 'lucide-react';
+import { Activity, ArrowUpRight, Bell, Bookmark, Building2, CheckCircle2, ChevronDown, ChevronRight, FileText, GraduationCap, LayoutDashboard, LogIn, LogOut, Menu, Plus, Radar, Search, ShieldCheck, Sparkles, Target, Users, X, Zap } from 'lucide-react';
 import './styles.css';
 import { createPlayer, createScoutingNote, generateScoutingReport, getSession, loadNotes, loadPlayers, loadWatchlist, saveReport, signIn, signOut, signUp, wtsConfigured, subscribeToAuth, toggleWatchlist } from './wts-api.js';
 
