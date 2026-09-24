@@ -1,5 +1,3 @@
-import { upload as blobUpload } from '@vercel/blob/client';
-
 export const demoPlayers = [
   { id: 'demo-1', full_name: 'Rayo Pearce', age: 15, position: 'CAM', secondary_position: 'RW', preferred_foot: 'Right', nationality: 'South Africa', city: 'Cape Town', current_club: 'Liverpool Portland FC', status: 'Emerging', fit_score: 94, minutes: 1120, goals: 11, assists: 14, strengths: ['Vision', 'Control', 'Progression'], bio: 'Creative attacking midfielder with strong spatial awareness and progression through the inside channels.', avatar_url: '' },
   { id: 'demo-2', full_name: 'Mandla Ndlovu', age: 18, position: 'RW', secondary_position: 'LW', preferred_foot: 'Left', nationality: 'South Africa', city: 'Johannesburg', current_club: 'Cape United Academy', status: 'Watchlist', fit_score: 91, minutes: 1380, goals: 13, assists: 9, strengths: ['1v1', 'Acceleration', 'Chance Creation'], bio: 'Direct winger who attacks the full-back and creates separation in transition.', avatar_url: '' },
@@ -227,19 +225,6 @@ export async function loadNotes(_userId, playerId) {
   return Array.isArray(result) ? result : result.notes || [];
 }
 
-export async function uploadPlayerMedia(userId, playerId, file) {
-  if (isPreviewMode) return URL.createObjectURL(file);
-  if (!userId) throw new Error('Authentication is required for media uploads.');
-  const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '-');
-  const result = await blobUpload(`players/${userId}/${playerId}/${Date.now()}-${safeName}`, file, {
-    access: 'private',
-    handleUploadUrl: '/api/upload',
-    clientPayload: JSON.stringify({ playerId }),
-    multipart: file.size > 4 * 1024 * 1024,
-  });
-  if (!result?.pathname) throw new Error('Blob upload completed without a pathname.');
-  return `/api/media?playerId=${encodeURIComponent(playerId)}&pathname=${encodeURIComponent(result.pathname)}`;
-}
 
 export async function generateScoutingReport(player, brief) {
   if (isPreviewMode) {
