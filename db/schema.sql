@@ -110,20 +110,6 @@ create table if not exists scouting_reports (
 
 create index if not exists scouting_reports_player_idx on scouting_reports(workspace_id, player_id, created_at desc);
 
-create table if not exists player_media (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id text not null,
-  player_id uuid not null references player_profiles(id) on delete cascade,
-  file_path text not null,
-  blob_url text not null,
-  file_name text not null,
-  mime_type text,
-  file_size bigint,
-  created_at timestamptz not null default now(),
-  constraint media_workspace_fk foreign key (workspace_id) references workspaces(id) on delete cascade
-);
-
-create index if not exists player_media_player_idx on player_media(workspace_id, player_id, created_at desc);
 
 create or replace function set_wts_updated_at() returns trigger language plpgsql as $$
 begin
